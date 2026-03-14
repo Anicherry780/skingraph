@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-app = FastAPI(title="SkinGraph API", version="1.0.0")
+app = FastAPI(title="SkinGraph API", version="2.0.0")
 
 # CORS — allow Cloudflare Pages frontend and local dev
 origins = [
@@ -23,13 +23,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Import routes — Phase 2+ will add analyze, alternatives, compatibility, upload
-# from routes.analyze import router as analyze_router
-# app.include_router(analyze_router)
+# ── Routes ──────────────────────────────────────────────────────────────────
+from routes.analyze import router as analyze_router
+
+app.include_router(analyze_router)
+
+# Phase 3+
+# from routes.alternatives import router as alternatives_router
+# from routes.compatibility import router as compatibility_router
+# from routes.upload import router as upload_router
+
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "SkinGraph API", "phase": 1}
+    return {"status": "ok", "service": "SkinGraph API", "phase": 2}
 
 @app.get("/health")
 async def health():

@@ -1,0 +1,104 @@
+.skin-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skin-type-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.skin-type-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Base pill style */
+.pill {
+  position: relative;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.pill:hover {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-light);
+}
+
+/* Selected — manual */
+.pill.selected {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.pill.selected:hover {
+  background: #18896a;
+  border-color: #18896a;
+  color: #fff;
+}
+
+/* Selected — auto-inferred (shows badge) */
+.pill.selected.auto {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  padding-right: 36px; /* space for badge */
+}
+
+/* "auto" badge */
+.auto-badge {
+  position: absolute;
+  top: -7px;
+  right: 6px;
+  background: var(--green-dark);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 4px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+/* Inference hint text */
+.inference-hint {
+  font-size: 13px;
+  color: var(--green-dark);
+  background: var(--green-light);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  animation: slide-down 0.2s ease;
+  line-height: 1.5;
+}
+
+.inference-reason {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

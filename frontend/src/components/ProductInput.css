@@ -1,0 +1,37 @@
+.product-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.product-input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.product-input::placeholder {
+  color: var(--text-muted);
+}
+
+.product-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(29, 158, 117, 0.12);
+}
+
+.product-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.product-input-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}

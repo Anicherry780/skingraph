@@ -40,6 +40,7 @@ interface AnalysisResult {
   cached: boolean;
   error?: string;
   corrected_name?: string | null;
+  ingredient_source?: "textract" | "obf" | "web_research" | "not_found";
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -363,6 +364,26 @@ const Results: React.FC = () => {
             <div className="correction-banner">
               <span>✏️</span>
               <span>Analyzed as <strong>{result.corrected_name}</strong> (auto-corrected from &quot;{payload?.product_name}&quot;)</span>
+            </div>
+          )}
+
+          {/* ── Ingredient source banners ─────────────────────────────── */}
+          {result.ingredient_source === "web_research" && (
+            <div className="source-banner web-research-banner">
+              <span>ℹ️</span>
+              <span>Ingredient data sourced from AI research — actual ingredients may vary. Upload a label photo for exact results.</span>
+            </div>
+          )}
+
+          {result.ingredient_source === "not_found" && (
+            <div className="source-banner not-found-banner">
+              <span>⚠️</span>
+              <div>
+                <p>We couldn't find the ingredient list for this product.</p>
+                <button className="btn-upload-prompt" onClick={() => navigate("/")}>
+                  📷 Upload a label photo for accurate analysis
+                </button>
+              </div>
             </div>
           )}
 

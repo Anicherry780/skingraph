@@ -211,6 +211,46 @@ def correct_product_name(product_name: str) -> str:
         return product_name
 
 
+def research_product_ingredients(product_name: str) -> dict:
+    """
+    Use Nova 2 Lite to research likely ingredients for a product
+    when no ingredient list was found via Textract or Open Beauty Facts.
+    Returns {"ingredients_text": str, "found": bool}
+    """
+    prompt = (
+        "You are a cosmetic chemist. Based on your knowledge of skincare products, "
+        f"list the most likely ingredients for: {product_name}\n\n"
+        "Return ONLY a comma-separated list of ingredients, like a real ingredient label. "
+        "Include 10-20 common ingredients for this specific product type and brand if known. "
+        "If you don't know this product at all, return exactly: UNKNOWN\n"
+        "Return only the ingredient list, nothing else."
+    )
+    try:
+        client = _bedrock_client()
+        body = {
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {"maxTokens": 512, "temperature": 0.2},
+        }
+        resp = client.invoke_model(
+            modelId=NOVA_LITE_MODEL_ID,
+            body=json.dumps(body),
+            contentType="application/json",
+            accept="application/json",
+        )
+        rb = json.loads(resp["body"].read())
+        text = rb["output"]["message"]["content"][0]["text"].strip()
+
+        if not text or text.upper() == "UNKNOWN" or len(text) < 10:
+            logger.info(f"Web research: no ingredients found for '{product_name}'")
+            return {"ingredients_text": "", "found": False}
+
+        logger.info(f"Web research found ingredients for '{product_name}': {text[:200]}")
+        return {"ingredients_text": text, "found": True}
+    except Exception as e:
+        logger.warning(f"Web research failed for '{product_name}': {e}")
+        return {"ingredients_text": "", "found": False}
+
+
 def _fallback_analysis(
     product_name: str, skin_type: str, error: str = "unavailable"
 ) -> dict:

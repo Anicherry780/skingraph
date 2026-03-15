@@ -442,6 +442,21 @@
   color: #fff;
 }
 
+.follow-up-pill.follow-up-skip {
+  background: none;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.follow-up-pill.follow-up-skip:hover {
+  color: var(--text-secondary);
+  border-color: transparent;
+  text-decoration: underline;
+}
+
 /* ===== Multi-photo grid ===== */
 .photo-grid {
   display: flex;

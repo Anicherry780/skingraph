@@ -381,6 +381,52 @@
   margin-bottom: 16px;
 }
 
+/* ── Ingredient source banners ─────────────────────────────────────────── */
+
+.source-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.web-research-banner {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1E40AF;
+}
+
+.not-found-banner {
+  background: #FEF3C7;
+  border: 1px solid #FDE68A;
+  color: #92400E;
+}
+
+.not-found-banner p {
+  margin: 0 0 8px;
+}
+
+.btn-upload-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-upload-prompt:hover {
+  background: var(--green-dark);
+}
+
 /* ── Analyse another ────────────────────────────────────────────────────── */
 
 .analyse-another {

@@ -31,7 +31,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
 from services.nova_embeddings import check_cache, generate_embedding, save_to_cache
-from services.nova_lite import analyze_ingredients, correct_product_name
+from services.nova_lite import analyze_ingredients, correct_product_name, research_product_ingredients
 from services.open_beauty_facts import fetch_ingredients
 from services.lambda_trigger import run_nova_act_parallel
 from services.skin_type_inference import infer_skin_type
@@ -130,6 +130,7 @@ async def analyze(req: AnalyzeRequest):
         # ── 4. Ingredient source: Textract (image) or Open Beauty Facts ──────
         ingredients_text = ""
         ingredients_found = False
+        ingredient_source = "not_found"
 
         all_images = req.get_all_images()
         logger.info(f"ANALYZE images: count={len(all_images)}, "
@@ -167,20 +168,38 @@ async def analyze(req: AnalyzeRequest):
             ingredients_text = merged.get("ingredients_text", "")
             ingredients_found = merged.get("found", False)
 
-            if not ingredients_text:
+            if ingredients_text:
+                ingredient_source = "textract"
+                logger.info(f"ANALYZE: Textract SUCCESS, ingredients_len={len(ingredients_text)}")
+            else:
                 logger.warning("ANALYZE: Textract found NO ingredients in any photo — falling back to OBF")
                 obf = fetch_ingredients(display_name)
                 ingredients_text = obf.get("ingredients_text") or ""
                 ingredients_found = obf.get("found", False)
+                if ingredients_text:
+                    ingredient_source = "obf"
                 logger.info(f"ANALYZE OBF fallback: found={ingredients_found}")
-            else:
-                logger.info(f"ANALYZE: Textract SUCCESS, ingredients_len={len(ingredients_text)}")
         else:
             logger.info("ANALYZE: no images, using Open Beauty Facts")
             obf = fetch_ingredients(display_name)
             ingredients_text = obf.get("ingredients_text") or ""
             ingredients_found = obf.get("found", False)
+            if ingredients_text:
+                ingredient_source = "obf"
             logger.info(f"ANALYZE OBF: found={ingredients_found}")
+
+        # ── 4b. Web research fallback (Nova 2 Lite) ──────────────────────────
+        if not ingredients_text:
+            logger.info("ANALYZE: no ingredients from Textract or OBF — trying web research")
+            research = research_product_ingredients(display_name)
+            ingredients_text = research.get("ingredients_text") or ""
+            ingredients_found = research.get("found", False)
+            if ingredients_text:
+                ingredient_source = "web_research"
+                logger.info(f"ANALYZE web research SUCCESS, ingredients_len={len(ingredients_text)}")
+            else:
+                ingredient_source = "not_found"
+                logger.info("ANALYZE web research: no ingredients found")
 
         if not ingredients_text:
             ingredients_text = "Ingredient list not available."
@@ -206,6 +225,7 @@ async def analyze(req: AnalyzeRequest):
             "brand_claims": brand_claims,
             "amazon_price": None,
             "ingredients_found": ingredients_found,
+            "ingredient_source": ingredient_source,
             "cached": False,
             "corrected_name": corrected_name if name_was_corrected else None,
         }

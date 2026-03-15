@@ -54,8 +54,9 @@ const Home: React.FC = () => {
     labels: string[];
   } | null>(null);
 
-  // Follow-up clarification
-  const [followUp, setFollowUp] = useState<{ question: string; options: string[] } | null>(null);
+  // Follow-up clarification (two-level cascading)
+  const [followUp, setFollowUp] = useState<{ level: 1 | 2; detectedType?: string; question: string; options: string[] } | null>(null);
+  const [selectedProductType, setSelectedProductType] = useState<string | null>(null);
   const [selectedFollowUp, setSelectedFollowUp] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,16 +65,66 @@ const Home: React.FC = () => {
   // Analyze button enabled when product typed AND skin type selected
   const canAnalyze = productName.trim().length > 0 && selectedSkinType !== null;
 
-  // Follow-up question logic
-  const getFollowUp = (name: string) => {
+  // Two-level follow-up question logic
+  const SECOND_LEVEL: Record<string, { question: string; options: string[] }> = {
+    Sunscreen:   { question: "What is the SPF level?", options: ["SPF 15", "SPF 30", "SPF 50", "SPF 50+"] },
+    Sunstick:    { question: "What is the SPF level?", options: ["SPF 15", "SPF 30", "SPF 50", "SPF 50+"] },
+    Moisturizer: { question: "What texture is it?", options: ["Gel", "Cream", "Lotion", "Balm"] },
+    Serum:       { question: "What type of serum?", options: ["Hydrating", "Brightening", "Anti-aging", "Acne", "Vitamin C", "Retinol", "Niacinamide"] },
+    Cleanser:    { question: "What type of cleanser?", options: ["Foaming", "Gel", "Cream", "Oil", "Micellar"] },
+    "Body Wash": { question: "What type?", options: ["Moisturizing", "Exfoliating", "Antibacterial", "Sensitive"] },
+    Exfoliant:   { question: "What type?", options: ["Physical", "Chemical AHA", "Chemical BHA", "Enzyme"] },
+  };
+
+  const PRODUCT_TYPE_OPTIONS = [
+    "Sunscreen", "Moisturizer", "Serum", "Cleanser", "Body Wash",
+    "Toner", "Eye Cream", "Face Oil", "Exfoliant", "Mask", "Mist", "Sunstick",
+  ];
+
+  /** Detect if the product name already implies a product type (direct second-level). */
+  const getFollowUp = (name: string): { level: 1 | 2; detectedType?: string; question: string; options: string[] } | null => {
     const n = name.toLowerCase();
-    if (/moisturis|moisturiz|cream/.test(n))
-      return { question: "What texture is it?", options: ["Gel", "Cream", "Lotion"] };
+
+    // Direct second-level triggers
     if (/sunscreen|sunblock|spf/.test(n))
-      return { question: "What is the SPF level?", options: ["SPF 15", "SPF 30", "SPF 50", "SPF 50+"] };
+      return { level: 2, detectedType: "Sunscreen", ...SECOND_LEVEL.Sunscreen };
+    if (/sunstick/.test(n))
+      return { level: 2, detectedType: "Sunstick", ...SECOND_LEVEL.Sunstick };
+    if (/moisturis|moisturiz|cream/.test(n))
+      return { level: 2, detectedType: "Moisturizer", ...SECOND_LEVEL.Moisturizer };
     if (/\bserum\b/.test(n))
-      return { question: "What type of serum?", options: ["Hydrating", "Treatment", "Vitamin C", "Retinol"] };
+      return { level: 2, detectedType: "Serum", ...SECOND_LEVEL.Serum };
+    if (/cleanser|face\s*wash/.test(n))
+      return { level: 2, detectedType: "Cleanser", ...SECOND_LEVEL.Cleanser };
+    if (/body\s*wash/.test(n))
+      return { level: 2, detectedType: "Body Wash", ...SECOND_LEVEL["Body Wash"] };
+    if (/exfoliant|scrub|peel/.test(n))
+      return { level: 2, detectedType: "Exfoliant", ...SECOND_LEVEL.Exfoliant };
+
+    // Generic first level — only when product name is short / ambiguous
+    const wordCount = name.trim().split(/\s+/).length;
+    if (wordCount < 4) {
+      return { level: 1, question: "What type of product is this?", options: PRODUCT_TYPE_OPTIONS };
+    }
+
     return null;
+  };
+
+  /** When user picks a first-level product type pill */
+  const handleProductTypePick = (type: string) => {
+    if (selectedProductType === type) {
+      // Deselect
+      setSelectedProductType(null);
+      setSelectedFollowUp(null);
+      return;
+    }
+    setSelectedProductType(type);
+    setSelectedFollowUp(null);
+  };
+
+  /** When user picks a second-level pill */
+  const handleSecondLevelPick = (opt: string) => {
+    setSelectedFollowUp(selectedFollowUp === opt ? null : opt);
   };
 
   // Handle product input change — runs inferSkinType on every keystroke
@@ -81,6 +132,7 @@ const Home: React.FC = () => {
     (value: string, inference: InferenceResult) => {
       setProductName(value);
       setFollowUp(getFollowUp(value));
+      setSelectedProductType(null);
       setSelectedFollowUp(null);
 
       if (value.trim() === "") {
@@ -156,6 +208,7 @@ const Home: React.FC = () => {
             if (data.product_name && !productName.trim()) {
               setProductName(data.product_name);
               setFollowUp(getFollowUp(data.product_name));
+              setSelectedProductType(null);
               setSelectedFollowUp(null);
             }
             if (data.skin_type_hint && !isInferred) {
@@ -317,9 +370,16 @@ const Home: React.FC = () => {
     if (!canAnalyze) return;
     setIsLoading(true);
 
-    const finalProductName = selectedFollowUp
-      ? `${productName} (${selectedFollowUp})`
-      : productName;
+    // Build final name with cascading selections
+    const typeLabel = followUp?.level === 2 ? followUp.detectedType : selectedProductType;
+    let finalProductName = productName;
+    if (typeLabel && selectedFollowUp) {
+      finalProductName = `${productName} (${typeLabel}, ${selectedFollowUp})`;
+    } else if (typeLabel) {
+      finalProductName = `${productName} (${typeLabel})`;
+    } else if (selectedFollowUp) {
+      finalProductName = `${productName} (${selectedFollowUp})`;
+    }
 
     const payload: AnalyzePayload = {
       product_name: finalProductName,
@@ -362,8 +422,34 @@ const Home: React.FC = () => {
             />
           </section>
 
-          {/* Follow-up clarification pills */}
-          {followUp && (
+          {/* Follow-up clarification pills — two-level cascade */}
+          {followUp && followUp.level === 1 && (
+            <section className="form-section follow-up-section">
+              <label className="section-label secondary">{followUp.question}</label>
+              <div className="follow-up-pills">
+                {followUp.options.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`follow-up-pill ${selectedProductType === opt ? "selected" : ""}`}
+                    onClick={() => handleProductTypePick(opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="follow-up-pill follow-up-skip"
+                  onClick={() => { setSelectedProductType(null); setSelectedFollowUp(null); setFollowUp(null); }}
+                >
+                  Skip &rarr;
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Second-level pills — shown after first-level pick OR direct keyword match */}
+          {followUp && followUp.level === 2 && (
             <section className="form-section follow-up-section">
               <label className="section-label secondary">{followUp.question}</label>
               <div className="follow-up-pills">
@@ -372,11 +458,44 @@ const Home: React.FC = () => {
                     key={opt}
                     type="button"
                     className={`follow-up-pill ${selectedFollowUp === opt ? "selected" : ""}`}
-                    onClick={() => setSelectedFollowUp(selectedFollowUp === opt ? null : opt)}
+                    onClick={() => handleSecondLevelPick(opt)}
                   >
                     {opt}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className="follow-up-pill follow-up-skip"
+                  onClick={() => { setSelectedFollowUp(null); setFollowUp(null); }}
+                >
+                  Skip &rarr;
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Second-level after first-level product type pick */}
+          {followUp && followUp.level === 1 && selectedProductType && SECOND_LEVEL[selectedProductType] && (
+            <section className="form-section follow-up-section">
+              <label className="section-label secondary">{SECOND_LEVEL[selectedProductType].question}</label>
+              <div className="follow-up-pills">
+                {SECOND_LEVEL[selectedProductType].options.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`follow-up-pill ${selectedFollowUp === opt ? "selected" : ""}`}
+                    onClick={() => handleSecondLevelPick(opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="follow-up-pill follow-up-skip"
+                  onClick={() => setSelectedFollowUp(null)}
+                >
+                  Skip &rarr;
+                </button>
               </div>
             </section>
           )}

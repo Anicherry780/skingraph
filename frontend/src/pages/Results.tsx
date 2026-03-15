@@ -40,7 +40,7 @@ interface AnalysisResult {
   cached: boolean;
   error?: string;
   corrected_name?: string | null;
-  ingredient_source?: "textract" | "obf" | "web_research" | "not_found";
+  ingredient_source?: "textract" | "obf" | "obf_research" | "web_research" | "estimated" | "not_found";
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -368,10 +368,17 @@ const Results: React.FC = () => {
           )}
 
           {/* ── Ingredient source banners ─────────────────────────────── */}
-          {result.ingredient_source === "web_research" && (
+          {result.ingredient_source === "obf_research" && (
             <div className="source-banner web-research-banner">
               <span>ℹ️</span>
-              <span>Ingredient data sourced from AI research — actual ingredients may vary. Upload a label photo for exact results.</span>
+              <span>Ingredients found from a similar product in our database — may not be an exact match. Upload a label photo for precise results.</span>
+            </div>
+          )}
+
+          {(result.ingredient_source === "web_research" || result.ingredient_source === "estimated") && (
+            <div className="source-banner estimated-banner">
+              <span>⚠️</span>
+              <span>Ingredients estimated based on product type — actual ingredients may differ. Upload a label photo for accurate analysis.</span>
             </div>
           )}
 
@@ -379,7 +386,7 @@ const Results: React.FC = () => {
             <div className="source-banner not-found-banner">
               <span>⚠️</span>
               <div>
-                <p>We couldn't find the ingredient list for this product.</p>
+                <p>We couldn&apos;t find the ingredient list for this product.</p>
                 <button className="btn-upload-prompt" onClick={() => navigate("/")}>
                   📷 Upload a label photo for accurate analysis
                 </button>
@@ -419,9 +426,9 @@ const Results: React.FC = () => {
           {result.ingredients.length > 0 && (
             <section className="r-section">
               <h2 className="section-title">🧪 Ingredient Breakdown</h2>
-              {!result.ingredients_found && (
+              {!result.ingredients_found && result.ingredient_source !== "estimated" && result.ingredient_source !== "web_research" && (
                 <p className="note-text">
-                  ℹ️ Exact ingredient list not found in Open Beauty Facts — analysis based on common formulation for this product type.
+                  ℹ️ Exact ingredient list not found — analysis based on common formulation for this product type.
                 </p>
               )}
               <div className="ingredients-grid">

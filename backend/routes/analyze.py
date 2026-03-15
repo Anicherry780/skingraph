@@ -188,18 +188,20 @@ async def analyze(req: AnalyzeRequest):
                 ingredient_source = "obf"
             logger.info(f"ANALYZE OBF: found={ingredients_found}")
 
-        # ── 4b. Web research fallback (Nova 2 Lite) ──────────────────────────
+        # ── 4b. Research fallback: OBF broader search → Nova estimate ────────
         if not ingredients_text:
-            logger.info("ANALYZE: no ingredients from Textract or OBF — trying web research")
+            logger.info("ANALYZE: no ingredients from Textract or OBF — trying research fallback")
             research = research_product_ingredients(display_name)
             ingredients_text = research.get("ingredients_text") or ""
             ingredients_found = research.get("found", False)
+            research_source = research.get("source", "not_found")
             if ingredients_text:
-                ingredient_source = "web_research"
-                logger.info(f"ANALYZE web research SUCCESS, ingredients_len={len(ingredients_text)}")
+                ingredient_source = research_source  # "obf_research" or "estimated"
+                logger.info(f"ANALYZE research SUCCESS, source={research_source}, "
+                            f"ingredients_len={len(ingredients_text)}")
             else:
                 ingredient_source = "not_found"
-                logger.info("ANALYZE web research: no ingredients found")
+                logger.info("ANALYZE research: no ingredients found from any source")
 
         if not ingredients_text:
             ingredients_text = "Ingredient list not available."

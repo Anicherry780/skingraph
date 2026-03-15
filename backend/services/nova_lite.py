@@ -213,17 +213,100 @@ def correct_product_name(product_name: str) -> str:
 
 def research_product_ingredients(product_name: str) -> dict:
     """
-    Use Nova 2 Lite to research likely ingredients for a product
-    when no ingredient list was found via Textract or Open Beauty Facts.
-    Returns {"ingredients_text": str, "found": bool}
+    Multi-tier ingredient research when Textract and OBF exact search both failed.
+
+    Tier 1: OBF broader search — try name variations
+    Tier 2: Nova 2 Lite knowledge estimate — formulate based on product type
+
+    Returns {"ingredients_text": str, "found": bool, "source": str}
+    source is "obf_research" | "estimated" | "not_found"
     """
+    import re as _re
+    import requests as _requests
+
+    # ── Tier 1: OBF broader search with name variations ──────────────────
+    logger.info(f"Research Tier 1: OBF broader search for '{product_name}'")
+
+    # Extract product type from parenthetical if present, e.g. "la screen (Sunscreen, SPF 50+)"
+    paren_match = _re.search(r"\(([^)]+)\)", product_name)
+    base_name = _re.sub(r"\s*\([^)]*\)\s*", " ", product_name).strip()
+    product_type = ""
+    product_detail = ""
+    if paren_match:
+        paren_parts = [p.strip() for p in paren_match.group(1).split(",")]
+        product_type = paren_parts[0] if paren_parts else ""
+        product_detail = paren_parts[1] if len(paren_parts) > 1 else ""
+
+    # Build search variations
+    search_variations = [
+        base_name,                                               # "la screen ultra"
+        f"{base_name} {product_type}".strip(),                   # "la screen ultra Sunscreen"
+    ]
+    # Add just brand words (first 1-2 words)
+    words = base_name.split()
+    if len(words) >= 2:
+        search_variations.append(" ".join(words[:2]))            # "la screen"
+    # Add product type alone if it's specific enough
+    if product_type and product_detail:
+        search_variations.append(f"{product_type} {product_detail}")  # "Sunscreen SPF 50+"
+
+    OBF_SEARCH_URL = "https://world.openbeautyfacts.org/cgi/search.pl"
+
+    for variation in search_variations:
+        if not variation or len(variation) < 3:
+            continue
+        try:
+            logger.info(f"Research OBF search: '{variation}'")
+            params = {
+                "search_terms": variation,
+                "search_simple": 1,
+                "action": "process",
+                "json": 1,
+                "page_size": 5,
+                "fields": "product_name,ingredients_text,brands",
+            }
+            resp = _requests.get(OBF_SEARCH_URL, params=params, timeout=8)
+            resp.raise_for_status()
+            data = resp.json()
+            products = data.get("products", [])
+
+            for p in products:
+                ing_text = (p.get("ingredients_text") or "").strip()
+                if ing_text and len(ing_text) > 20:
+                    # Clean up
+                    ing_text = _re.sub(r"\*+[^,]*", "", ing_text)
+                    ing_text = _re.sub(r"\[\d+\]", "", ing_text)
+                    ing_text = _re.sub(r"\s+", " ", ing_text).strip().rstrip("., ")
+                    obf_name = p.get("product_name") or variation
+                    logger.info(f"Research OBF HIT via '{variation}': "
+                                f"product='{obf_name}', ingredients_len={len(ing_text)}")
+                    return {
+                        "ingredients_text": ing_text,
+                        "found": True,
+                        "source": "obf_research",
+                    }
+
+            logger.info(f"Research OBF '{variation}': no ingredients in {len(products)} results")
+        except Exception as e:
+            logger.warning(f"Research OBF search failed for '{variation}': {e}")
+
+    # ── Tier 2: Nova 2 Lite knowledge-based estimation ───────────────────
+    logger.info(f"Research Tier 2: Nova estimate for '{product_name}'")
+
+    type_hint = product_type or "skincare product"
+    detail_hint = f" with {product_detail}" if product_detail else ""
+
     prompt = (
-        "You are a cosmetic chemist. Based on your knowledge of skincare products, "
-        f"list the most likely ingredients for: {product_name}\n\n"
-        "Return ONLY a comma-separated list of ingredients, like a real ingredient label. "
-        "Include 10-20 common ingredients for this specific product type and brand if known. "
-        "If you don't know this product at all, return exactly: UNKNOWN\n"
-        "Return only the ingredient list, nothing else."
+        "You are a cosmetic chemist with deep knowledge of skincare formulations.\n\n"
+        f"Product: {product_name}\n"
+        f"Product type: {type_hint}{detail_hint}\n\n"
+        "Based on your knowledge of typical formulations for this type of product, "
+        "list the most likely ingredients in INCI format, as they would appear on a real label. "
+        "Include 12-18 ingredients typical for this product type. "
+        "Start with the base (like Water/Aqua), then key actives, then common "
+        "emollients, preservatives, and other standard ingredients.\n\n"
+        "Return ONLY the comma-separated ingredient list, nothing else. "
+        "If you truly cannot determine any likely ingredients, return exactly: UNKNOWN"
     )
     try:
         client = _bedrock_client()
@@ -240,15 +323,24 @@ def research_product_ingredients(product_name: str) -> dict:
         rb = json.loads(resp["body"].read())
         text = rb["output"]["message"]["content"][0]["text"].strip()
 
-        if not text or text.upper() == "UNKNOWN" or len(text) < 10:
-            logger.info(f"Web research: no ingredients found for '{product_name}'")
-            return {"ingredients_text": "", "found": False}
+        # Strip markdown fences if present
+        text = _strip_markdown(text)
 
-        logger.info(f"Web research found ingredients for '{product_name}': {text[:200]}")
-        return {"ingredients_text": text, "found": True}
+        if not text or "UNKNOWN" in text.upper() or len(text) < 15:
+            logger.info(f"Research estimate: Nova returned no usable ingredients for '{product_name}'")
+            return {"ingredients_text": "", "found": False, "source": "not_found"}
+
+        # Validate: should look like a comma-separated list
+        commas = text.count(",")
+        if commas < 3:
+            logger.info(f"Research estimate: too few commas ({commas}), likely not an ingredient list")
+            return {"ingredients_text": "", "found": False, "source": "not_found"}
+
+        logger.info(f"Research estimate SUCCESS for '{product_name}': {text[:200]}")
+        return {"ingredients_text": text, "found": True, "source": "estimated"}
     except Exception as e:
-        logger.warning(f"Web research failed for '{product_name}': {e}")
-        return {"ingredients_text": "", "found": False}
+        logger.warning(f"Research estimate failed for '{product_name}': {e}")
+        return {"ingredients_text": "", "found": False, "source": "not_found"}
 
 
 def _fallback_analysis(

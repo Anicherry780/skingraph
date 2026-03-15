@@ -366,6 +366,21 @@
   color: var(--text-secondary);
 }
 
+/* ── Correction banner ──────────────────────────────────────────────────── */
+
+.correction-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #92400e;
+  margin-bottom: 16px;
+}
+
 /* ── Analyse another ────────────────────────────────────────────────────── */
 
 .analyse-another {

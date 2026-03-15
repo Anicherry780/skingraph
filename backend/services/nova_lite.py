@@ -144,6 +144,43 @@ def analyze_ingredients(
         return _fallback_analysis(product_name, skin_type)
 
 
+def correct_product_name(product_name: str) -> str:
+    """
+    Use Nova 2 Lite to fix misspelled skincare product names.
+    Returns the corrected name, or the original if unchanged/error.
+    """
+    # Skip correction for very short names
+    if len(product_name.strip()) <= 3:
+        return product_name
+
+    prompt = (
+        "You are a skincare product name spell checker. "
+        "Fix any obvious spelling mistakes in the product name below and return ONLY the corrected name — "
+        "no explanation, no quotes, no extra text. If the name is already correct, return it exactly as-is. "
+        "Do not change brand names (like CeraVe, Neutrogena, La Roche-Posay) unless clearly misspelled.\n\n"
+        f"Product name: {product_name}"
+    )
+    try:
+        client = _bedrock_client()
+        body = {
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {"maxTokens": 60, "temperature": 0.1},
+        }
+        resp = client.invoke_model(
+            modelId=NOVA_LITE_MODEL_ID,
+            body=json.dumps(body),
+            contentType="application/json",
+            accept="application/json",
+        )
+        rb = json.loads(resp["body"].read())
+        corrected = rb["output"]["message"]["content"][0]["text"].strip().strip('"\'')
+        logger.info(f"Spell correction: '{product_name}' → '{corrected}'")
+        return corrected if corrected else product_name
+    except Exception as e:
+        logger.warning(f"Spell correction failed: {e}")
+        return product_name
+
+
 def _fallback_analysis(
     product_name: str, skin_type: str, error: str = "unavailable"
 ) -> dict:

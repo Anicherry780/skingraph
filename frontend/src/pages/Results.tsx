@@ -39,6 +39,7 @@ interface AnalysisResult {
   ingredients_found: boolean;
   cached: boolean;
   error?: string;
+  corrected_name?: string | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -348,6 +349,14 @@ const Results: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* ── Correction banner ───────────────────────────────────────── */}
+          {result.corrected_name && (
+            <div className="correction-banner">
+              <span>✏️</span>
+              <span>Analyzed as <strong>{result.corrected_name}</strong> (auto-corrected from &quot;{payload?.product_name}&quot;)</span>
+            </div>
+          )}
 
           {/* ── Score card ──────────────────────────────────────────────── */}
           <section className="score-card">

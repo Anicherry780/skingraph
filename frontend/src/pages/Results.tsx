@@ -58,12 +58,13 @@ function scoreColor(score: number) {
   return "#E24B4A";
 }
 
-function scoreLabel(score: number) {
-  if (score >= 80) return "Excellent match";
-  if (score >= 65) return "Good match";
-  if (score >= 50) return "Decent match";
+function scoreLabel(score: number, skinType: string) {
+  const skin = SKIN_TYPE_LABELS[skinType] ?? skinType;
+  if (score >= 80) return `Great for ${skin} skin`;
+  if (score >= 65) return `Suitable for ${skin} skin`;
+  if (score >= 50) return `Decent for ${skin} skin`;
   if (score >= 35) return "Mixed results";
-  return "Poor match";
+  return `Not recommended for ${skin} skin`;
 }
 
 const SKIN_TYPE_LABELS: Record<string, string> = {
@@ -237,7 +238,7 @@ const Results: React.FC = () => {
                 className="score-label-text"
                 style={{ color: scoreColor(result.suitability_score) }}
               >
-                {scoreLabel(result.suitability_score)}
+                {scoreLabel(result.suitability_score, result.skin_type)}
               </p>
               <p className="score-summary">{result.summary}</p>
             </div>

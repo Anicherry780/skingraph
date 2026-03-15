@@ -144,20 +144,36 @@ def analyze_ingredients(
         return _fallback_analysis(product_name, skin_type)
 
 
+def _levenshtein(a: str, b: str) -> int:
+    """Simple Levenshtein distance."""
+    if len(a) < len(b):
+        a, b = b, a
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (ca != cb)))
+        prev = curr
+    return prev[-1]
+
+
 def correct_product_name(product_name: str) -> str:
     """
-    Use Nova 2 Lite to fix misspelled skincare product names.
-    Returns the corrected name, or the original if unchanged/error.
+    Use Nova 2 Lite to fix obvious typos in skincare product names.
+    Conservative: rejects correction if it changes >40% of characters.
     """
-    # Skip correction for very short names
     if len(product_name.strip()) <= 3:
         return product_name
 
     prompt = (
-        "You are a skincare product name spell checker. "
-        "Fix any obvious spelling mistakes in the product name below and return ONLY the corrected name — "
-        "no explanation, no quotes, no extra text. If the name is already correct, return it exactly as-is. "
-        "Do not change brand names (like CeraVe, Neutrogena, La Roche-Posay) unless clearly misspelled.\n\n"
+        "Fix ONLY spelling typos in this skincare product name. "
+        "Do NOT change the brand name. Do NOT replace it with a different brand. "
+        "Do NOT add new words. If it looks like an unknown or foreign brand name, "
+        "return it exactly as typed. Only fix obvious character-level typos "
+        "like 'creem' → 'cream' or 'moisterizer' → 'moisturizer'. "
+        "Return only the corrected name, nothing else.\n\n"
         f"Product name: {product_name}"
     )
     try:
@@ -174,8 +190,22 @@ def correct_product_name(product_name: str) -> str:
         )
         rb = json.loads(resp["body"].read())
         corrected = rb["output"]["message"]["content"][0]["text"].strip().strip('"\'')
+
+        if not corrected:
+            return product_name
+
+        # Reject if correction changes more than 40% of characters (too aggressive)
+        max_len = max(len(product_name), len(corrected), 1)
+        dist = _levenshtein(product_name.lower(), corrected.lower())
+        if dist / max_len > 0.40:
+            logger.info(
+                f"Spell correction rejected (distance {dist}/{max_len}={dist/max_len:.0%}): "
+                f"'{product_name}' → '{corrected}'"
+            )
+            return product_name
+
         logger.info(f"Spell correction: '{product_name}' → '{corrected}'")
-        return corrected if corrected else product_name
+        return corrected
     except Exception as e:
         logger.warning(f"Spell correction failed: {e}")
         return product_name

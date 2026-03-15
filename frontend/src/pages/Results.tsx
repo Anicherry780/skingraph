@@ -160,7 +160,13 @@ const Results: React.FC = () => {
       const resp = await fetch(`${API_URL}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestPayload),
+        body: JSON.stringify({
+          ...(requestPayload as Record<string, unknown>),
+          images_base64: (requestPayload as { images_base64?: string[]; image_base64?: string }).images_base64
+            ?? ((requestPayload as { image_base64?: string }).image_base64
+              ? [(requestPayload as { image_base64: string }).image_base64]
+              : []),
+        }),
       });
       if (!resp.ok) {
         const detail = await resp.json().catch(() => ({}));
@@ -194,7 +200,9 @@ const Results: React.FC = () => {
 
   // ── Loading step ticker ────────────────────────────────────────────────
 
-  const loadingSteps = payload?.image_base64 ? LOADING_STEPS_IMAGE : LOADING_STEPS_DEFAULT;
+  const loadingSteps = ((payload?.images_base64?.length ?? 0) > 0 || !!payload?.image_base64)
+    ? LOADING_STEPS_IMAGE
+    : LOADING_STEPS_DEFAULT;
 
   useEffect(() => {
     if (!loading) return;

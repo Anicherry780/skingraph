@@ -24,6 +24,7 @@ Pipeline (with image_base64 — Phase 4):
 
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -35,7 +36,7 @@ from services.open_beauty_facts import fetch_ingredients
 from services.lambda_trigger import run_nova_act_parallel
 from services.skin_type_inference import infer_skin_type
 from services.s3_service import upload_photo, save_analysis
-from services.textract_service import extract_all_from_s3
+from services.textract_service import extract_all_from_s3, merge_textract_results
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -52,6 +53,7 @@ class AnalyzeRequest(BaseModel):
     skin_type_inferred: bool = False
     second_product: Optional[str] = None
     image_base64: Optional[str] = None
+    images_base64: list[str] = []
 
     @field_validator("product_name")
     @classmethod
@@ -69,6 +71,20 @@ class AnalyzeRequest(BaseModel):
             raise ValueError(f"skin_type must be one of {VALID_SKIN_TYPES}")
         return v
 
+    @field_validator("images_base64")
+    @classmethod
+    def check_images_max(cls, v: list[str]) -> list[str]:
+        if len(v) > 5:
+            raise ValueError("Maximum 5 images allowed")
+        return v
+
+    def get_all_images(self) -> list[str]:
+        """Unified list of base64 images (new list + backward-compat single)."""
+        imgs = list(self.images_base64)
+        if self.image_base64 and self.image_base64 not in imgs:
+            imgs.append(self.image_base64)
+        return imgs[:5]
+
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────
 
@@ -76,7 +92,7 @@ class AnalyzeRequest(BaseModel):
 async def analyze(req: AnalyzeRequest):
     logger.info(
         f"Analyze: '{req.product_name}' skin_type={req.skin_type} "
-        f"has_image={bool(req.image_base64)}"
+        f"has_images={len(req.get_all_images())}"
     )
 
     try:
@@ -115,26 +131,36 @@ async def analyze(req: AnalyzeRequest):
         ingredients_text = ""
         ingredients_found = False
 
-        if req.image_base64:
-            logger.info("Phase 4: uploading label photo to S3 → Textract")
-            s3_key = upload_photo(req.image_base64, f"{uuid.uuid4().hex}.jpg")
+        all_images = req.get_all_images()
+        if all_images:
+            logger.info(f"Phase 4: processing {len(all_images)} image(s) through S3 → Textract")
 
-            if s3_key:
-                textract = extract_all_from_s3(s3_key)
-                ingredients_text = textract.get("ingredients_text", "")
-                ingredients_found = textract.get("found", False)
-                if ingredients_found:
-                    logger.info("Textract: ingredients extracted from label")
-                else:
-                    logger.info("Textract: no ingredients found — falling back to OBF")
-            else:
-                logger.warning("S3 upload failed — using OBF fallback")
+            def _process_image(b64: str) -> dict:
+                key = upload_photo(b64, f"{uuid.uuid4().hex}.jpg")
+                if not key:
+                    return {"ingredients_text": "", "product_name_hint": "", "all_text": "", "found": False}
+                return extract_all_from_s3(key)
 
-            # Fall back to OBF if Textract came up empty
+            textract_results: list[dict] = []
+            with ThreadPoolExecutor(max_workers=min(len(all_images), 5)) as ex:
+                futs = [ex.submit(_process_image, img) for img in all_images]
+                for fut in futs:
+                    try:
+                        textract_results.append(fut.result())
+                    except Exception as e:
+                        logger.warning(f"Image Textract failed: {e}")
+
+            merged = merge_textract_results(textract_results) if textract_results else {}
+            ingredients_text = merged.get("ingredients_text", "")
+            ingredients_found = merged.get("found", False)
+
             if not ingredients_text:
+                logger.info("Textract found no ingredients — falling back to OBF")
                 obf = fetch_ingredients(display_name)
                 ingredients_text = obf.get("ingredients_text") or ""
                 ingredients_found = obf.get("found", False)
+            else:
+                logger.info(f"Textract merged ingredients (len={len(ingredients_text)})")
         else:
             # Standard path: Open Beauty Facts
             obf = fetch_ingredients(display_name)

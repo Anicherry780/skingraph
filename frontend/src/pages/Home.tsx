@@ -12,8 +12,12 @@ interface AnalyzePayload {
   skin_type: string;
   skin_type_inferred: boolean;
   second_product?: string;
+  images_base64?: string[];
+  // backward compat
   image_base64?: string;
 }
+
+const MAX_PHOTOS = 5;
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -29,8 +33,8 @@ const Home: React.FC = () => {
   const [showSecondProduct, setShowSecondProduct] = useState(false);
   const [secondProductName, setSecondProductName] = useState("");
 
-  // Photo upload state
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  // Multi-photo upload state
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +47,7 @@ const Home: React.FC = () => {
 
   // Label scan
   const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState("");
   const [detectedInfo, setDetectedInfo] = useState<{
     product_name: string;
     skin_type_hint: string | null;
@@ -79,7 +84,6 @@ const Home: React.FC = () => {
       setSelectedFollowUp(null);
 
       if (value.trim() === "") {
-        // Clear all state when input is cleared
         setSelectedSkinType(null);
         setIsInferred(false);
         setInferredReason("");
@@ -93,7 +97,6 @@ const Home: React.FC = () => {
         setInferredReason(inference.reason);
         setMatchedKeyword(inference.matchedKeyword);
       } else {
-        // If no match found, keep current manual selection (don't reset it)
         if (isInferred) {
           setSelectedSkinType(null);
           setIsInferred(false);
@@ -119,66 +122,119 @@ const Home: React.FC = () => {
     setSecondProductName(_value);
   };
 
-  // scanLabel: call /api/scan-label with a base64 image
-  const scanLabel = useCallback(async (base64: string) => {
+  // scanLabel: call /api/scan-label with ALL current images
+  const scanLabel = useCallback(async (images: string[]) => {
+    if (!images.length) return;
     setIsScanning(true);
     setDetectedInfo(null);
+    setScanProgress(
+      images.length === 1
+        ? "🔍 Reading label..."
+        : `🔍 Reading photo 1 of ${images.length}...`
+    );
+
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      const resp = await fetch(`${apiUrl}/api/scan-label`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_base64: base64 }),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.product_name && !productName.trim()) {
-          setProductName(data.product_name);
-          setFollowUp(getFollowUp(data.product_name));
-          setSelectedFollowUp(null);
+
+      // Simulate per-photo progress updates
+      if (images.length > 1) {
+        let current = 1;
+        const progressInterval = setInterval(() => {
+          current = Math.min(current + 1, images.length);
+          setScanProgress(`🔍 Reading photo ${current} of ${images.length}...`);
+        }, 1800);
+
+        try {
+          const resp = await fetch(`${apiUrl}/api/scan-label`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ images_base64: images }),
+          });
+          clearInterval(progressInterval);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.product_name && !productName.trim()) {
+              setProductName(data.product_name);
+              setFollowUp(getFollowUp(data.product_name));
+              setSelectedFollowUp(null);
+            }
+            if (data.skin_type_hint && !isInferred) {
+              setSelectedSkinType(data.skin_type_hint as SkinTypeOption);
+              setIsInferred(true);
+              setInferredReason("Detected from label photo");
+              setMatchedKeyword("");
+            }
+            setDetectedInfo({
+              product_name: data.product_name || "",
+              skin_type_hint: data.skin_type_hint,
+              labels: data.detected_labels || [],
+            });
+          }
+        } finally {
+          clearInterval(progressInterval);
         }
-        if (data.skin_type_hint && !isInferred) {
-          setSelectedSkinType(data.skin_type_hint as SkinTypeOption);
-          setIsInferred(true);
-          setInferredReason("Detected from label photo");
-          setMatchedKeyword("");
-        }
-        setDetectedInfo({
-          product_name: data.product_name || "",
-          skin_type_hint: data.skin_type_hint,
-          labels: data.detected_labels || [],
+      } else {
+        const resp = await fetch(`${apiUrl}/api/scan-label`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ images_base64: images }),
         });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.product_name && !productName.trim()) {
+            setProductName(data.product_name);
+            setFollowUp(getFollowUp(data.product_name));
+            setSelectedFollowUp(null);
+          }
+          if (data.skin_type_hint && !isInferred) {
+            setSelectedSkinType(data.skin_type_hint as SkinTypeOption);
+            setIsInferred(true);
+            setInferredReason("Detected from label photo");
+            setMatchedKeyword("");
+          }
+          setDetectedInfo({
+            product_name: data.product_name || "",
+            skin_type_hint: data.skin_type_hint,
+            labels: data.detected_labels || [],
+          });
+        }
       }
     } catch {
       // silent fail — user can type manually
     } finally {
       setIsScanning(false);
+      setScanProgress("");
     }
   }, [productName, isInferred]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle file upload
-  const processFile = (file: File) => {
+  // Handle file upload — adds to list
+  const processFile = useCallback((file: File) => {
     if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
       alert("Please upload a JPG, PNG, or WEBP image.");
+      return;
+    }
+    if (uploadedImages.length >= MAX_PHOTOS) {
+      alert(`Maximum ${MAX_PHOTOS} photos allowed.`);
       return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
       const base64 = (e.target?.result as string).split(",")[1];
-      setUploadedImage(base64);
-      scanLabel(base64);
-
-      // If no skin type inferred yet, hint user it'll come from label
+      const newList = [...uploadedImages, base64];
+      setUploadedImages(newList);
+      scanLabel(newList);
       if (!selectedSkinType) {
         setInferredReason("Skin type will be detected from the label");
       }
     };
     reader.readAsDataURL(file);
-  };
+  }, [uploadedImages, selectedSkinType, scanLabel]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) processFile(file);
+    // Reset input so same file can be re-added
+    if (e.target) e.target.value = "";
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -195,8 +251,23 @@ const Home: React.FC = () => {
 
   const handleDragLeave = () => setIsDragOver(false);
 
+  // Remove a photo by index
+  const removePhoto = (idx: number) => {
+    const newList = uploadedImages.filter((_, i) => i !== idx);
+    setUploadedImages(newList);
+    if (newList.length === 0) {
+      setDetectedInfo(null);
+    } else {
+      scanLabel(newList);
+    }
+  };
+
   // Camera functions
   const startCamera = useCallback(async () => {
+    if (uploadedImages.length >= MAX_PHOTOS) {
+      alert(`Maximum ${MAX_PHOTOS} photos allowed.`);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
@@ -206,7 +277,7 @@ const Home: React.FC = () => {
     } catch {
       alert("Camera unavailable. Please upload a photo instead.");
     }
-  }, []);
+  }, [uploadedImages.length]);
 
   const stopCamera = useCallback(() => {
     cameraStream?.getTracks().forEach((t) => t.stop());
@@ -222,10 +293,11 @@ const Home: React.FC = () => {
     canvas.height = video.videoHeight;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
     const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-    setUploadedImage(base64);
+    const newList = [...uploadedImages, base64];
+    setUploadedImages(newList);
     stopCamera();
-    scanLabel(base64);
-  }, [stopCamera, scanLabel]);
+    scanLabel(newList);
+  }, [uploadedImages, stopCamera, scanLabel]);
 
   // Camera stream setup
   useEffect(() => {
@@ -259,11 +331,10 @@ const Home: React.FC = () => {
       payload.second_product = secondProductName;
     }
 
-    if (uploadedImage) {
-      payload.image_base64 = uploadedImage;
+    if (uploadedImages.length > 0) {
+      payload.images_base64 = uploadedImages;
     }
 
-    // Navigate to results page with payload in state
     navigate("/results", { state: { payload } });
   };
 
@@ -344,55 +415,70 @@ const Home: React.FC = () => {
               </>
             ) : (
               <>
-                <div
-                  className={`drop-zone ${isDragOver ? "drag-over" : ""} ${uploadedImage ? "has-file" : ""}`}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onClick={() => fileInputRef.current?.click()}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
-                >
-                  {uploadedImage ? (
-                    <div className="upload-preview">
-                      <span className="upload-check">✓</span>
-                      <span>Label photo uploaded</span>
-                      <button
-                        className="remove-image"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUploadedImage(null);
-                          setDetectedInfo(null);
-                        }}
-                        type="button"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
+                {/* Drop zone — shown only when no photos yet */}
+                {uploadedImages.length === 0 && (
+                  <div
+                    className={`drop-zone ${isDragOver ? "drag-over" : ""}`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={() => fileInputRef.current?.click()}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+                  >
                     <div className="upload-prompt">
                       <span className="upload-icon">📷</span>
-                      <span>Or drag &amp; drop a product label photo</span>
-                      <span className="upload-types">JPG · PNG · WEBP</span>
+                      <span>Drag &amp; drop a product label photo</span>
+                      <span className="upload-types">JPG · PNG · WEBP · up to {MAX_PHOTOS} photos</span>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* Photo thumbnails grid */}
+                {uploadedImages.length > 0 && (
+                  <div className="photo-grid">
+                    {uploadedImages.map((b64, idx) => (
+                      <div key={idx} className="photo-thumb">
+                        <img
+                          src={`data:image/jpeg;base64,${b64}`}
+                          alt={`Label photo ${idx + 1}`}
+                          className="photo-thumb-img"
+                        />
+                        <button
+                          type="button"
+                          className="photo-remove-btn"
+                          onClick={() => removePhoto(idx)}
+                          aria-label={`Remove photo ${idx + 1}`}
+                        >
+                          ✕
+                        </button>
+                        <span className="photo-num">{idx + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload action buttons */}
                 <div className="upload-actions">
-                  <button
-                    type="button"
-                    className="upload-action-btn"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    📁 Upload Photo
-                  </button>
-                  <button
-                    type="button"
-                    className="upload-action-btn"
-                    onClick={startCamera}
-                  >
-                    📷 Use Camera
-                  </button>
+                  {uploadedImages.length < MAX_PHOTOS && (
+                    <button
+                      type="button"
+                      className="upload-action-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {uploadedImages.length === 0 ? "📁 Upload Photo" : "➕ Add Another Photo"}
+                    </button>
+                  )}
+                  {uploadedImages.length < MAX_PHOTOS && (
+                    <button
+                      type="button"
+                      className="upload-action-btn"
+                      onClick={startCamera}
+                    >
+                      📷 Use Camera
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -400,13 +486,18 @@ const Home: React.FC = () => {
             <canvas ref={canvasRef} style={{ display: "none" }} />
 
             {isScanning && (
-              <p className="scanning-label">🔍 Reading label...</p>
+              <p className="scanning-label">{scanProgress || "🔍 Reading label..."}</p>
             )}
 
-            {detectedInfo && detectedInfo.labels.length > 0 && (
+            {detectedInfo && detectedInfo.labels.length > 0 && !isScanning && (
               <div className="detection-banner">
                 <span className="detection-icon">🔬</span>
-                <span>Detected: {detectedInfo.labels.slice(0, 3).join(" · ")}</span>
+                <span>
+                  {detectedInfo.product_name
+                    ? `Detected: ${detectedInfo.product_name} · `
+                    : "Detected: "}
+                  {detectedInfo.labels.slice(0, 3).join(" · ")}
+                </span>
               </div>
             )}
 
@@ -417,7 +508,7 @@ const Home: React.FC = () => {
               onChange={handleFileInput}
               style={{ display: "none" }}
             />
-            {uploadedImage && !selectedSkinType && !isScanning && (
+            {uploadedImages.length > 0 && !selectedSkinType && !isScanning && (
               <p className="upload-hint">Skin type will be detected from the label</p>
             )}
             <p className="upload-privacy">

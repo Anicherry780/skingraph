@@ -1,29 +1,64 @@
 """
 Rekognition helpers for SkinGraph Phase 4.
-
-Detects product type and skin-type hints from a product label photo
-already uploaded to the skingraph-uploads S3 bucket.
+Used ONLY for skin type hints via label detection.
+Product name comes from Textract, not Rekognition.
 """
 
 import logging
 import os
-import re
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger(__name__)
 
 UPLOADS_BUCKET = "skingraph-uploads"
 
-SKIN_TYPE_KEYWORDS = {
-    "oily": ["oil control", "oil-free", "oily", "shine", "mattifying", "matte", "pore"],
-    "dry": ["dry", "hydrating", "moisture", "nourishing", "rich", "intensive moisture"],
-    "sensitive": ["sensitive", "gentle", "hypoallergenic", "calming", "soothing", "fragrance-free"],
-    "combination": ["combination", "balance", "t-zone", "normal to"],
+# Rekognition label → skin type mapping
+_LABEL_SKIN_MAP: dict[str, str] = {
+    "Sunscreen": "combination",
+    "Sun Screen": "combination",
+    "Tanning": "combination",
+    "Moisturizer": "dry",
+    "Moisturiser": "dry",
+    "Lotion": "dry",
+    "Body Lotion": "dry",
+    "Face Cream": "dry",
+    "Skin Care": "combination",
+    "Cosmetics": "combination",
+    "Cream": "dry",
+}
+
+# Text keywords in label → skin type mapping
+_TEXT_SKIN_MAP: dict[str, str] = {
+    "oil control": "oily",
+    "oil-free": "oily",
+    "oily skin": "oily",
+    "shine control": "oily",
+    "mattifying": "oily",
+    "matte": "oily",
+    "dry skin": "dry",
+    "hydrating": "dry",
+    "moisture": "dry",
+    "nourishing": "dry",
+    "intensive": "dry",
+    "sensitive skin": "sensitive",
+    "sensitive": "sensitive",
+    "gentle": "sensitive",
+    "hypoallergenic": "sensitive",
+    "calming": "sensitive",
+    "soothing": "sensitive",
+    "fragrance-free": "sensitive",
+    "combination skin": "combination",
+    "combination": "combination",
+    "t-zone": "combination",
+    "spf": "combination",
+    "sunscreen": "combination",
+    "sunblock": "combination",
 }
 
 
-def _rekognition_client():
+def _rek_client():
     return boto3.client(
         "rekognition",
         region_name=os.getenv("AWS_REGION", "us-east-1"),
@@ -34,61 +69,71 @@ def _rekognition_client():
 
 def detect_product_from_s3(s3_key: str) -> dict:
     """
-    Use Rekognition to detect product type and skin-type hints from a label photo.
+    Run Rekognition detectLabels + detectText on S3 object.
+    Used ONLY for skin type hints. Product name comes from Textract.
 
     Returns:
         {
-            "product_type": str,          # "Bottle", "Cosmetics", etc., or "Skincare Product"
-            "detected_labels": list[str], # top 5 label names
-            "skin_type_hint": str | None, # first skin type keyword found
-            "top_confidence": float,      # confidence of first label
+            "product_type":     str,           # top label name or "Skincare Product"
+            "detected_labels":  list[str],     # top 5 label names
+            "skin_type_hint":   str | None,    # first matched skin type
+            "top_confidence":   float,
         }
     """
-    rek = _rekognition_client()
-    s3_obj = {"Bucket": UPLOADS_BUCKET, "Name": s3_key}
+    rek = _rek_client()
+    s3_doc = {"S3Object": {"Bucket": UPLOADS_BUCKET, "Name": s3_key}}
 
     detected_labels: list[str] = []
     product_type = "Skincare Product"
     top_confidence = 0.0
-    skin_type_hint = None
+    skin_type_hint: str | None = None
 
-    # ── detectLabels ────────────────────────────────────────────────────────
+    # ── detectLabels → skin type hint ───────────────────────────────────────
     try:
-        label_resp = rek.detect_labels(
-            Image={"S3Object": s3_obj},
+        resp = rek.detect_labels(
+            Image=s3_doc,
             MaxLabels=10,
-            MinConfidence=70,
+            MinConfidence=70.0,
         )
-        labels = label_resp.get("Labels", [])
+        labels = resp.get("Labels", [])
         detected_labels = [l["Name"] for l in labels[:5]]
         if labels:
             product_type = labels[0]["Name"]
-            top_confidence = float(labels[0].get("Confidence", 0.0))
-        logger.info(f"Rekognition detectLabels '{s3_key}': {detected_labels}")
-    except Exception as e:
-        logger.warning(f"Rekognition detectLabels failed for '{s3_key}': {e}")
+            top_confidence = round(labels[0].get("Confidence", 0.0), 1)
 
-    # ── detectText ──────────────────────────────────────────────────────────
-    try:
-        text_resp = rek.detect_text(Image={"S3Object": s3_obj})
-        text_detections = text_resp.get("TextDetections", [])
-        detected_words = " ".join(
-            td["DetectedText"] for td in text_detections
-            if td.get("Type") == "LINE"
-        ).lower()
-
-        for skin_type, keywords in SKIN_TYPE_KEYWORDS.items():
-            for kw in keywords:
-                if re.search(re.escape(kw), detected_words, re.IGNORECASE):
-                    skin_type_hint = skin_type
-                    logger.info(
-                        f"Rekognition detectText '{s3_key}': skin_type_hint={skin_type} (keyword='{kw}')"
-                    )
-                    break
-            if skin_type_hint:
+        for label in labels:
+            name = label.get("Name", "")
+            if name in _LABEL_SKIN_MAP:
+                skin_type_hint = _LABEL_SKIN_MAP[name]
+                logger.info(f"Rekognition skin hint from label '{name}': {skin_type_hint}")
                 break
+
+        logger.info(f"Rekognition detectLabels: {detected_labels}")
+    except (BotoCoreError, ClientError) as e:
+        logger.warning(f"Rekognition detectLabels failed: {e}")
     except Exception as e:
-        logger.warning(f"Rekognition detectText failed for '{s3_key}': {e}")
+        logger.warning(f"Rekognition detectLabels unexpected error: {e}")
+
+    # ── detectText → skin type hint (if not already found) ──────────────────
+    if not skin_type_hint:
+        try:
+            resp = rek.detect_text(Image=s3_doc)
+            lines = [
+                d["DetectedText"]
+                for d in resp.get("TextDetections", [])
+                if d.get("Type") == "LINE"
+            ]
+            full_text = " ".join(lines).lower()
+            for kw, stype in _TEXT_SKIN_MAP.items():
+                if kw in full_text:
+                    skin_type_hint = stype
+                    logger.info(f"Rekognition skin hint from text keyword '{kw}': {stype}")
+                    break
+            logger.info(f"Rekognition detectText: {len(lines)} lines, skin_type_hint={skin_type_hint}")
+        except (BotoCoreError, ClientError) as e:
+            logger.warning(f"Rekognition detectText failed: {e}")
+        except Exception as e:
+            logger.warning(f"Rekognition detectText unexpected error: {e}")
 
     return {
         "product_type": product_type,

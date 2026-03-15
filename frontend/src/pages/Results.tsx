@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import IngredientCard from "../components/IngredientCard";
+import RedFlagAlert from "../components/RedFlagAlert";
 import "./Results.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -10,6 +12,9 @@ interface Ingredient {
   is_flagged: boolean;
   flag_reason: string | null;
   description: string;
+  irritant_risk: "none" | "low" | "medium" | "high";
+  comedogenic_rating: number;
+  safe_for_skin_type: "safe" | "caution" | "avoid";
 }
 
 interface RedFlag {
@@ -34,21 +39,23 @@ interface AnalysisResult {
   error?: string;
 }
 
-// ── Category badge colours ────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
-const CATEGORY_COLORS: Record<string, string> = {
-  moisturizer: "#1D9E75",
-  humectant: "#1D9E75",
-  antioxidant: "#1D9E75",
-  emollient: "#085041",
-  occlusive: "#085041",
-  active: "#BA7517",
-  exfoliant: "#BA7517",
-  fragrance: "#E24B4A",
-  preservative: "#6B7280",
-  surfactant: "#6B7280",
-  other: "#9CA3AF",
+const SKIN_TYPE_LABELS: Record<string, string> = {
+  dry: "Dry",
+  oily: "Oily",
+  combination: "Combination",
+  sensitive: "Sensitive",
 };
+
+const SKIN_TYPES = ["oily", "dry", "combination", "sensitive"] as const;
+
+const LOADING_STEPS = [
+  "Looking up ingredients…",
+  "Running ingredient analysis…",
+  "Comparing brand claims…",
+  "Generating your report…",
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,21 +73,6 @@ function scoreLabel(score: number, skinType: string) {
   if (score >= 35) return "Mixed results";
   return `Not recommended for ${skin} skin`;
 }
-
-const SKIN_TYPE_LABELS: Record<string, string> = {
-  dry: "Dry",
-  oily: "Oily",
-  combination: "Combination",
-  sensitive: "Sensitive",
-};
-
-const LOADING_STEPS = [
-  "Looking up ingredients…",
-  "Running ingredient analysis…",
-  "Checking Amazon price…",
-  "Comparing brand claims…",
-  "Generating your report…",
-];
 
 // ── Circular Score ───────────────────────────────────────────────────────────
 
@@ -136,46 +128,58 @@ const Results: React.FC = () => {
   const API_URL =
     import.meta.env.VITE_API_URL || "https://skingraph-backend.onrender.com";
 
-  // Rotate loading step text
+  // ── Shared fetch helper ─────────────────────────────────────────────────
+
+  const runAnalysis = async (requestPayload: object) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch(`${API_URL}/api/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestPayload),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(
+          (detail as { detail?: string }).detail || `Server error ${resp.status}`
+        );
+      }
+      const data: AnalysisResult = await resp.json();
+      setResult(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Initial fetch ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!payload) { navigate("/"); return; }
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+    runAnalysis(payload);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Re-analyze with new skin type ───────────────────────────────────────
+
+  const reAnalyze = (newSkinType: string) => {
+    runAnalysis({
+      ...payload,
+      skin_type: newSkinType,
+      skin_type_inferred: false,
+    });
+  };
+
+  // ── Loading step ticker ─────────────────────────────────────────────────
+
   useEffect(() => {
     if (!loading) return;
     const id = setInterval(() => setLoadingStep((s) => (s + 1) % LOADING_STEPS.length), 2500);
     return () => clearInterval(id);
   }, [loading]);
-
-  // Fetch analysis
-  useEffect(() => {
-    if (!payload) { navigate("/"); return; }
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-
-    async function fetchAnalysis() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const resp = await fetch(`${API_URL}/api/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!resp.ok) {
-          const detail = await resp.json().catch(() => ({}));
-          throw new Error((detail as { detail?: string }).detail || `Server error ${resp.status}`);
-        }
-
-        const data: AnalysisResult = await resp.json();
-        setResult(data);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchAnalysis();
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!payload) return null;
 
@@ -213,7 +217,36 @@ const Results: React.FC = () => {
       {!loading && result && (
         <main className="results-content">
 
-          {/* Product header */}
+          {/* ── Inference banner (shown when skin type was auto-inferred) ── */}
+          {result.skin_type_inferred && (
+            <div className="inference-banner">
+              <div className="inference-banner-text">
+                <span className="inference-icon">ℹ️</span>
+                <div>
+                  <p>
+                    We analyzed this as{" "}
+                    <strong>{SKIN_TYPE_LABELS[result.skin_type] ?? result.skin_type} skin</strong>{" "}
+                    based on the product type.
+                  </p>
+                  <p className="inference-sub">Not your skin type? Re-analyze below:</p>
+                </div>
+              </div>
+              <div className="inference-pills">
+                {SKIN_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    className={`inf-pill${type === result.skin_type ? " active" : ""}`}
+                    onClick={() => reAnalyze(type)}
+                    disabled={loading}
+                  >
+                    {SKIN_TYPE_LABELS[type]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Product header ──────────────────────────────────────────── */}
           <div className="product-header">
             <div className="product-header-top">
               <h1 className="product-title">{result.product_name}</h1>
@@ -230,7 +263,7 @@ const Results: React.FC = () => {
             </div>
           </div>
 
-          {/* Score card */}
+          {/* ── Score card ──────────────────────────────────────────────── */}
           <section className="score-card">
             <ScoreCircle score={result.suitability_score} />
             <div className="score-info">
@@ -244,25 +277,24 @@ const Results: React.FC = () => {
             </div>
           </section>
 
-          {/* Red flags */}
+          {/* ── Red flags ───────────────────────────────────────────────── */}
           {result.red_flags.length > 0 && (
             <section className="r-section">
               <h2 className="section-title">⚠️ Red Flags</h2>
               <div className="red-flags-list">
                 {result.red_flags.map((flag, i) => (
-                  <div key={i} className={`red-flag-card sev-${flag.severity}`}>
-                    <div className="flag-top">
-                      <span className="flag-name">{flag.ingredient}</span>
-                      <span className={`sev-badge sev-${flag.severity}`}>{flag.severity}</span>
-                    </div>
-                    <p className="flag-reason">{flag.reason}</p>
-                  </div>
+                  <RedFlagAlert
+                    key={i}
+                    ingredient={flag.ingredient}
+                    reason={flag.reason}
+                    severity={flag.severity}
+                  />
                 ))}
               </div>
             </section>
           )}
 
-          {/* Ingredients */}
+          {/* ── Ingredient breakdown ────────────────────────────────────── */}
           {result.ingredients.length > 0 && (
             <section className="r-section">
               <h2 className="section-title">🧪 Ingredient Breakdown</h2>
@@ -273,27 +305,23 @@ const Results: React.FC = () => {
               )}
               <div className="ingredients-grid">
                 {result.ingredients.map((ing, i) => (
-                  <div key={i} className={`ingredient-card${ing.is_flagged ? " flagged" : ""}`}>
-                    <div className="ingredient-top">
-                      <span className="ingredient-name">{ing.name}</span>
-                      <span
-                        className="cat-badge"
-                        style={{ background: CATEGORY_COLORS[ing.category] ?? "#9CA3AF" }}
-                      >
-                        {ing.category}
-                      </span>
-                    </div>
-                    <p className="ingredient-desc">{ing.description}</p>
-                    {ing.is_flagged && ing.flag_reason && (
-                      <p className="ingredient-flag-note">⚠️ {ing.flag_reason}</p>
-                    )}
-                  </div>
+                  <IngredientCard
+                    key={i}
+                    name={ing.name}
+                    category={ing.category}
+                    is_flagged={ing.is_flagged}
+                    flag_reason={ing.flag_reason}
+                    description={ing.description}
+                    irritant_risk={ing.irritant_risk ?? "none"}
+                    comedogenic_rating={ing.comedogenic_rating ?? 0}
+                    safe_for_skin_type={ing.safe_for_skin_type ?? "safe"}
+                  />
                 ))}
               </div>
             </section>
           )}
 
-          {/* Brand vs Reality */}
+          {/* ── Brand vs Reality ────────────────────────────────────────── */}
           {result.reality_check && (
             <section className="r-section">
               <h2 className="section-title">🔬 Brand vs Reality</h2>
@@ -310,7 +338,7 @@ const Results: React.FC = () => {
             </section>
           )}
 
-          {/* Analyse another */}
+          {/* ── Analyse another ─────────────────────────────────────────── */}
           <div className="analyse-another">
             <button className="btn-primary" onClick={() => navigate("/")}>
               Analyse another product

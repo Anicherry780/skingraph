@@ -63,7 +63,10 @@ Analyze these ingredients for someone with {skin_type} skin. Return ONLY a valid
       "category": "<one of: moisturizer|exfoliant|preservative|fragrance|active|emollient|occlusive|humectant|antioxidant|surfactant|other>",
       "is_flagged": <true or false>,
       "flag_reason": "<concise reason if flagged, otherwise null>",
-      "description": "<1-sentence benefit or function>"
+      "description": "<1-sentence benefit or function>",
+      "irritant_risk": "<none|low|medium|high>",
+      "comedogenic_rating": <integer 0-5>,
+      "safe_for_skin_type": "<safe|caution|avoid> for {skin_type} skin — return only the word: safe, caution, or avoid"
     }}
   ],
   "red_flags": [

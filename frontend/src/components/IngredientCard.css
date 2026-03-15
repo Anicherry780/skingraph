@@ -1,0 +1,109 @@
+/* ===== IngredientCard ================================================== */
+
+.ingredient-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  transition: border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ingredient-card:hover  { border-color: var(--green); }
+.ingredient-card.flagged {
+  border-color: #FECACA;
+  background: #FFF8F8;
+}
+
+/* Name + category row */
+.ingredient-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ingredient-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  flex: 1;
+}
+.cat-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  border-radius: 10px;
+  padding: 2px 8px;
+  text-transform: capitalize;
+  letter-spacing: 0.2px;
+}
+
+/* Description */
+.ingredient-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Meta row */
+.ingredient-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* Irritant risk pill */
+.irritant-pill {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* Comedogenic dots */
+.comed-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.comed-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.comed-dots {
+  display: flex;
+  gap: 3px;
+}
+.comed-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #E5E7EB;
+  transition: background 0.15s;
+}
+.comed-dot.filled {
+  background: #BA7517;
+}
+
+/* Safe / Caution / Avoid chip */
+.safe-chip {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 2px 8px;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
+}
+
+/* Flag note */
+.ingredient-flag-note {
+  font-size: 12px;
+  color: var(--red);
+  font-weight: 500;
+  margin: 0;
+}

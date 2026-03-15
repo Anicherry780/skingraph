@@ -1,26 +1,27 @@
 """
-Lambda trigger — runs both Nova Act sessions in parallel.
+Lambda trigger — runs the Nova Act brand claims session.
 
-Priority order:
-1. AWS Lambda (if LAMBDA_AMAZON_FN + LAMBDA_CLAIMS_FN env vars set)
-2. Direct threading fallback (runs nova_act.py functions in threads)
+Nova Act sessions: 1 (brand site claims only).
+Ingredients come from Open Beauty Facts API — no Nova Act session needed for that.
 
-Either way, both sessions run concurrently and results are merged.
+Priority:
+1. AWS Lambda (if LAMBDA_CLAIMS_FN env var set)
+2. Direct call fallback (runs get_brand_claims in-process)
 """
 
 import json
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Optional
 
 import boto3
 
-from services.nova_act import get_amazon_price, get_brand_claims
+from services.nova_act import get_brand_claims
 
 logger = logging.getLogger(__name__)
 
-_SESSION_TIMEOUT = 30  # seconds per Nova Act session
+_SESSION_TIMEOUT = 30  # seconds
 
 
 def _invoke_lambda(function_name: str, payload: dict) -> Optional[dict]:
@@ -46,55 +47,29 @@ def _invoke_lambda(function_name: str, payload: dict) -> Optional[dict]:
 
 def run_nova_act_parallel(product_name: str) -> dict:
     """
-    Run Amazon price + brand claims lookups in parallel.
-    Returns: {"amazon_price": str | None, "brand_claims": str | None}
-    """
-    lambda_amazon = os.getenv("LAMBDA_AMAZON_FN")
-    lambda_claims = os.getenv("LAMBDA_CLAIMS_FN")
+    Run the brand claims Nova Act session.
+    Uses Lambda if LAMBDA_CLAIMS_FN is set, otherwise calls directly.
 
-    amazon_price: Optional[str] = None
+    Returns: {"brand_claims": str | None}
+    """
+    lambda_claims = os.getenv("LAMBDA_CLAIMS_FN")
     brand_claims: Optional[str] = None
 
-    if lambda_amazon and lambda_claims:
-        # True parallel via Lambda
-        logger.info("Using AWS Lambda for parallel Nova Act sessions")
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_price = executor.submit(
-                _invoke_lambda, lambda_amazon, {"product_name": product_name}
-            )
-            fut_claims = executor.submit(
-                _invoke_lambda, lambda_claims, {"product_name": product_name}
-            )
-            try:
-                price_result = fut_price.result(timeout=_SESSION_TIMEOUT)
-                amazon_price = price_result.get("price") if price_result else None
-            except (TimeoutError, Exception) as e:
-                logger.warning(f"Lambda price lookup failed: {e}")
-
-            try:
-                claims_result = fut_claims.result(timeout=_SESSION_TIMEOUT)
-                brand_claims = claims_result.get("claims") if claims_result else None
-            except (TimeoutError, Exception) as e:
-                logger.warning(f"Lambda claims lookup failed: {e}")
+    if lambda_claims:
+        logger.info(f"Invoking Lambda for brand claims: {lambda_claims}")
+        try:
+            result = _invoke_lambda(lambda_claims, {"product_name": product_name})
+            brand_claims = result.get("claims") if result else None
+        except Exception as e:
+            logger.warning(f"Lambda claims failed: {e}")
 
     else:
-        # Threaded fallback — direct nova_act calls
-        logger.info("Using threaded fallback for Nova Act sessions")
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_price = executor.submit(get_amazon_price, product_name)
-            fut_claims = executor.submit(get_brand_claims, product_name)
-
+        logger.info("Running brand claims Nova Act session directly")
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(get_brand_claims, product_name)
             try:
-                amazon_price = fut_price.result(timeout=_SESSION_TIMEOUT)
+                brand_claims = future.result(timeout=_SESSION_TIMEOUT)
             except (TimeoutError, Exception) as e:
-                logger.warning(f"Amazon price lookup failed: {e}")
+                logger.warning(f"Brand claims session failed: {e}")
 
-            try:
-                brand_claims = fut_claims.result(timeout=_SESSION_TIMEOUT)
-            except (TimeoutError, Exception) as e:
-                logger.warning(f"Brand claims lookup failed: {e}")
-
-    return {
-        "amazon_price": amazon_price,
-        "brand_claims": brand_claims,
-    }
+    return {"brand_claims": brand_claims}

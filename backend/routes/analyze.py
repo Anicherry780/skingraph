@@ -3,12 +3,13 @@ POST /api/analyze — main analysis endpoint.
 
 Pipeline:
 1. Resolve skin type (backend inference if "auto")
-2. Check Supabase cache → return immediately if hit
-3. Fetch ingredients from Open Beauty Facts (free, no API key)
-4. Run Nova Act in parallel: Amazon price + brand claims
-5. Analyze ingredients with Nova 2 Lite on Bedrock
-6. Save result to cache
-7. Return full analysis
+2. Generate embedding for cache lookup
+3. Check Supabase cache (vector similarity first, hash fallback)
+4. Fetch ingredients from Open Beauty Facts (free, no API key)
+5. Run Nova Act: brand site claims only (1 session)
+6. Analyze ingredients with Nova 2 Lite on Bedrock
+7. Save result + embedding to cache
+8. Return full analysis
 """
 
 import logging
@@ -17,7 +18,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
-from services.nova_embeddings import check_cache, save_to_cache
+from services.nova_embeddings import check_cache, generate_embedding, save_to_cache
 from services.nova_lite import analyze_ingredients
 from services.open_beauty_facts import fetch_ingredients
 from services.lambda_trigger import run_nova_act_parallel
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ── Request / Response models ───────────────────────────────────────────────
+# ── Request model ────────────────────────────────────────────────────────────
 
 VALID_SKIN_TYPES = {"oily", "dry", "combination", "sensitive", "auto"}
 
@@ -56,14 +57,14 @@ class AnalyzeRequest(BaseModel):
         return v
 
 
-# ── Endpoint ────────────────────────────────────────────────────────────────
+# ── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.post("/api/analyze")
 async def analyze(req: AnalyzeRequest):
-    logger.info(f"Analyze request: '{req.product_name}' skin_type={req.skin_type}")
+    logger.info(f"Analyze: '{req.product_name}' skin_type={req.skin_type}")
 
     try:
-        # ── 1. Resolve skin type ─────────────────────────────────────────
+        # ── 1. Resolve skin type ─────────────────────────────────────────────
         skin_type = req.skin_type
         skin_type_inferred = req.skin_type_inferred
 
@@ -73,8 +74,12 @@ async def analyze(req: AnalyzeRequest):
             skin_type_inferred = was_inferred
             logger.info(f"Skin type resolved: {skin_type} (inferred={was_inferred})")
 
-        # ── 2. Cache check ───────────────────────────────────────────────
-        cached = check_cache(req.product_name, skin_type)
+        # ── 2. Generate embedding (used for cache lookup + storage) ──────────
+        embed_text = f"{req.product_name} {skin_type}"
+        embedding = generate_embedding(embed_text)
+
+        # ── 3. Cache check (vector similarity → hash fallback) ───────────────
+        cached = check_cache(req.product_name, skin_type, embedding=embedding)
         if cached:
             return {
                 **cached,
@@ -83,7 +88,7 @@ async def analyze(req: AnalyzeRequest):
                 "skin_type_inferred": skin_type_inferred,
             }
 
-        # ── 3. Open Beauty Facts ─────────────────────────────────────────
+        # ── 4. Open Beauty Facts ─────────────────────────────────────────────
         obf = fetch_ingredients(req.product_name)
         ingredients_text = obf.get("ingredients_text") or ""
         ingredients_found = obf.get("found", False)
@@ -92,12 +97,11 @@ async def analyze(req: AnalyzeRequest):
         if not ingredients_text:
             ingredients_text = "Ingredient list not available in Open Beauty Facts database."
 
-        # ── 4. Nova Act (parallel) ───────────────────────────────────────
+        # ── 5. Nova Act: brand claims only (1 session) ───────────────────────
         nova_result = run_nova_act_parallel(req.product_name)
-        amazon_price = nova_result.get("amazon_price")
         brand_claims = nova_result.get("brand_claims")
 
-        # ── 5. Nova 2 Lite analysis ──────────────────────────────────────
+        # ── 6. Nova 2 Lite ingredient analysis ───────────────────────────────
         analysis = analyze_ingredients(
             product_name=req.product_name,
             skin_type=skin_type,
@@ -105,20 +109,20 @@ async def analyze(req: AnalyzeRequest):
             brand_claims=brand_claims,
         )
 
-        # ── 6. Build response ────────────────────────────────────────────
+        # ── 7. Build response ────────────────────────────────────────────────
         result = {
             **analysis,
             "product_name": req.product_name,
             "skin_type": skin_type,
             "skin_type_inferred": skin_type_inferred,
-            "amazon_price": amazon_price,
             "brand_claims": brand_claims,
+            "amazon_price": None,       # Phase 3: restore via alternatives endpoint
             "ingredients_found": ingredients_found,
             "cached": False,
         }
 
-        # ── 7. Cache (non-blocking — errors don't affect response) ───────
-        save_to_cache(req.product_name, skin_type, analysis)
+        # ── 8. Save to cache with embedding ──────────────────────────────────
+        save_to_cache(req.product_name, skin_type, analysis, embedding=embedding)
 
         return result
 

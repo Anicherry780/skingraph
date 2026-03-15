@@ -25,18 +25,20 @@ app.add_middleware(
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 from routes.analyze import router as analyze_router
+from routes.alternatives import router as alternatives_router
+from routes.compatibility import router as compatibility_router
 
 app.include_router(analyze_router)
+app.include_router(alternatives_router)
+app.include_router(compatibility_router)
 
-# Phase 3+
-# from routes.alternatives import router as alternatives_router
-# from routes.compatibility import router as compatibility_router
+# Phase 4+
 # from routes.upload import router as upload_router
 
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "SkinGraph API", "phase": 2}
+    return {"status": "ok", "service": "SkinGraph API", "phase": 3}
 
 @app.get("/health")
 async def health():

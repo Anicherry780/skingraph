@@ -1,0 +1,126 @@
+/* ── Compatibility Checker ───────────────────────────────────────────────── */
+
+.compat-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.compat-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--green-light);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.compat-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Products row */
+.compat-products {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.compat-product-chip {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compat-plus {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Verdict block */
+.compat-verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+.compat-verdict.safe {
+  background: var(--green-light);
+  border-color: #A7F3D0;
+}
+.compat-verdict.conflict {
+  background: #FFF3CD;
+  border-color: #F59E0B;
+}
+
+.compat-verdict-icon { font-size: 20px; flex-shrink: 0; }
+
+.compat-verdict-text {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+.compat-recommendation {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Conflict cards */
+.compat-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.compat-conflict-card {
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.conflict-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.conflict-pair {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+.conflict-sev-badge {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.conflict-reason {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}

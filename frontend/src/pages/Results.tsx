@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import IngredientCard from "../components/IngredientCard";
 import RedFlagAlert from "../components/RedFlagAlert";
+import AlternativesGrid, { type Alternative } from "../components/AlternativesGrid";
+import CompatibilityChecker, { type CompatibilityResult } from "../components/CompatibilityChecker";
 import "./Results.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -119,20 +121,32 @@ const Results: React.FC = () => {
   const navigate = useNavigate();
   const payload = location.state?.payload;
 
+  // ── Main analysis state ────────────────────────────────────────────────
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadingStep, setLoadingStep] = useState(0);
   const hasFetched = useRef(false);
 
+  // ── Phase 3: Alternatives state ────────────────────────────────────────
+  const [alternatives, setAlternatives] = useState<Alternative[]>([]);
+  const [altLoading, setAltLoading] = useState(false);
+
+  // ── Phase 3: Compatibility state ───────────────────────────────────────
+  const [compatibility, setCompatibility] = useState<CompatibilityResult | null>(null);
+  const [compatLoading, setCompatLoading] = useState(false);
+
   const API_URL =
     import.meta.env.VITE_API_URL || "https://skingraph-backend.onrender.com";
 
-  // ── Shared fetch helper ─────────────────────────────────────────────────
+  // ── Shared analysis fetch ──────────────────────────────────────────────
 
   const runAnalysis = async (requestPayload: object) => {
     setLoading(true);
     setError(null);
+    // Reset secondary sections on re-analyze
+    setAlternatives([]);
+    setCompatibility(null);
     try {
       const resp = await fetch(`${API_URL}/api/analyze`, {
         method: "POST",
@@ -154,7 +168,7 @@ const Results: React.FC = () => {
     }
   };
 
-  // ── Initial fetch ───────────────────────────────────────────────────────
+  // ── Initial fetch ──────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!payload) { navigate("/"); return; }
@@ -163,23 +177,85 @@ const Results: React.FC = () => {
     runAnalysis(payload);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Re-analyze with new skin type ───────────────────────────────────────
+  // ── Re-analyze with new skin type ──────────────────────────────────────
 
   const reAnalyze = (newSkinType: string) => {
-    runAnalysis({
-      ...payload,
-      skin_type: newSkinType,
-      skin_type_inferred: false,
-    });
+    runAnalysis({ ...payload, skin_type: newSkinType, skin_type_inferred: false });
   };
 
-  // ── Loading step ticker ─────────────────────────────────────────────────
+  // ── Loading step ticker ────────────────────────────────────────────────
 
   useEffect(() => {
     if (!loading) return;
     const id = setInterval(() => setLoadingStep((s) => (s + 1) % LOADING_STEPS.length), 2500);
     return () => clearInterval(id);
   }, [loading]);
+
+  // ── Fetch alternatives once main analysis completes ────────────────────
+
+  useEffect(() => {
+    if (!result || loading) return;
+
+    async function fetchAlternatives() {
+      setAltLoading(true);
+      try {
+        const ingredientNames = result!.ingredients.map((i) => i.name);
+        const resp = await fetch(`${API_URL}/api/alternatives`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_name: result!.product_name,
+            skin_type: result!.skin_type,
+            key_ingredients: ingredientNames,
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          setAlternatives(data.alternatives ?? []);
+        }
+      } catch (e) {
+        console.warn("Alternatives fetch failed:", e);
+      } finally {
+        setAltLoading(false);
+      }
+    }
+
+    fetchAlternatives();
+  }, [result?.product_name, result?.skin_type]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch compatibility if second product was entered ──────────────────
+
+  useEffect(() => {
+    if (!result || loading || !payload?.second_product) return;
+
+    async function fetchCompatibility() {
+      setCompatLoading(true);
+      try {
+        const ingredientNames = result!.ingredients.map((i) => i.name);
+        const resp = await fetch(`${API_URL}/api/compatibility`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product1_name: result!.product_name,
+            product1_ingredients: ingredientNames,
+            product2_name: payload.second_product,
+            product2_ingredients: [],
+            skin_type: result!.skin_type,
+          }),
+        });
+        if (resp.ok) {
+          const data: CompatibilityResult = await resp.json();
+          setCompatibility(data);
+        }
+      } catch (e) {
+        console.warn("Compatibility fetch failed:", e);
+      } finally {
+        setCompatLoading(false);
+      }
+    }
+
+    fetchCompatibility();
+  }, [result?.product_name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!payload) return null;
 
@@ -217,7 +293,7 @@ const Results: React.FC = () => {
       {!loading && result && (
         <main className="results-content">
 
-          {/* ── Inference banner (shown when skin type was auto-inferred) ── */}
+          {/* ── Inference banner ────────────────────────────────────────── */}
           {result.skin_type_inferred && (
             <div className="inference-banner">
               <div className="inference-banner-text">
@@ -267,10 +343,7 @@ const Results: React.FC = () => {
           <section className="score-card">
             <ScoreCircle score={result.suitability_score} />
             <div className="score-info">
-              <p
-                className="score-label-text"
-                style={{ color: scoreColor(result.suitability_score) }}
-              >
+              <p className="score-label-text" style={{ color: scoreColor(result.suitability_score) }}>
                 {scoreLabel(result.suitability_score, result.skin_type)}
               </p>
               <p className="score-summary">{result.summary}</p>
@@ -335,6 +408,28 @@ const Results: React.FC = () => {
                 <span className="box-label">Science says</span>
                 <p>{result.reality_check}</p>
               </div>
+            </section>
+          )}
+
+          {/* ── Section 5: Cheaper alternatives ─────────────────────────── */}
+          <section className="r-section">
+            <h2 className="section-title">💰 Cheaper Alternatives</h2>
+            <p className="section-subtitle">
+              Products with similar active ingredients at a lower price
+            </p>
+            <AlternativesGrid alternatives={alternatives} loading={altLoading} />
+          </section>
+
+          {/* ── Section 6: Routine compatibility ────────────────────────── */}
+          {(payload?.second_product) && (
+            <section className="r-section">
+              <h2 className="section-title">🔄 Routine Compatibility</h2>
+              <CompatibilityChecker
+                result={compatibility}
+                loading={compatLoading}
+                product1={result.product_name}
+                product2={payload.second_product}
+              />
             </section>
           )}
 

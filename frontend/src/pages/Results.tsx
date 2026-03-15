@@ -52,8 +52,16 @@ const SKIN_TYPE_LABELS: Record<string, string> = {
 
 const SKIN_TYPES = ["oily", "dry", "combination", "sensitive"] as const;
 
-const LOADING_STEPS = [
+const LOADING_STEPS_DEFAULT = [
   "Looking up ingredients…",
+  "Running ingredient analysis…",
+  "Comparing brand claims…",
+  "Generating your report…",
+];
+
+const LOADING_STEPS_IMAGE = [
+  "Reading label text…",
+  "Extracting ingredients from photo…",
   "Running ingredient analysis…",
   "Comparing brand claims…",
   "Generating your report…",
@@ -185,11 +193,13 @@ const Results: React.FC = () => {
 
   // ── Loading step ticker ────────────────────────────────────────────────
 
+  const loadingSteps = payload?.image_base64 ? LOADING_STEPS_IMAGE : LOADING_STEPS_DEFAULT;
+
   useEffect(() => {
     if (!loading) return;
-    const id = setInterval(() => setLoadingStep((s) => (s + 1) % LOADING_STEPS.length), 2500);
+    const id = setInterval(() => setLoadingStep((s) => (s + 1) % loadingSteps.length), 2500);
     return () => clearInterval(id);
-  }, [loading]);
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch alternatives once main analysis completes ────────────────────
 
@@ -273,7 +283,7 @@ const Results: React.FC = () => {
         <div className="state-center">
           <div className="spinner" />
           <p className="loading-product">{payload.product_name}</p>
-          <p className="loading-step">{LOADING_STEPS[loadingStep]}</p>
+          <p className="loading-step">{loadingSteps[loadingStep]}</p>
         </div>
       )}
 

@@ -38,7 +38,7 @@ app.include_router(compatibility_router)
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "SkinGraph API", "phase": 3}
+    return {"status": "ok", "service": "SkinGraph API", "phase": 4}
 
 @app.get("/health")
 async def health():

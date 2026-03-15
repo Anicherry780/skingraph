@@ -1,18 +1,29 @@
 """
 POST /api/analyze — main analysis endpoint.
 
-Pipeline:
+Pipeline (no image):
 1. Resolve skin type (backend inference if "auto")
 2. Generate embedding for cache lookup
 3. Check Supabase cache (vector similarity first, hash fallback)
 4. Fetch ingredients from Open Beauty Facts (free, no API key)
 5. Run Nova Act: brand site claims only (1 session)
 6. Analyze ingredients with Nova 2 Lite on Bedrock
-7. Save result + embedding to cache
+7. Save result + embedding to Supabase; persist JSON to S3
+8. Return full analysis
+
+Pipeline (with image_base64 — Phase 4):
+1. Resolve skin type
+2. Upload photo to S3 (skingraph-uploads, auto-deleted after 1 day)
+3. Run Textract to extract ingredient list from label
+4. Skip Open Beauty Facts — use Textract text directly
+5. Run Nova Act: brand claims
+6. Analyze with Nova 2 Lite
+7. Save to Supabase cache + S3 analyses bucket
 8. Return full analysis
 """
 
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -23,6 +34,8 @@ from services.nova_lite import analyze_ingredients
 from services.open_beauty_facts import fetch_ingredients
 from services.lambda_trigger import run_nova_act_parallel
 from services.skin_type_inference import infer_skin_type
+from services.s3_service import upload_photo, save_analysis
+from services.textract_service import extract_ingredients_from_s3
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,7 +74,10 @@ class AnalyzeRequest(BaseModel):
 
 @router.post("/api/analyze")
 async def analyze(req: AnalyzeRequest):
-    logger.info(f"Analyze: '{req.product_name}' skin_type={req.skin_type}")
+    logger.info(
+        f"Analyze: '{req.product_name}' skin_type={req.skin_type} "
+        f"has_image={bool(req.image_base64)}"
+    )
 
     try:
         # ── 1. Resolve skin type ─────────────────────────────────────────────
@@ -88,14 +104,39 @@ async def analyze(req: AnalyzeRequest):
                 "skin_type_inferred": skin_type_inferred,
             }
 
-        # ── 4. Open Beauty Facts ─────────────────────────────────────────────
-        obf = fetch_ingredients(req.product_name)
-        ingredients_text = obf.get("ingredients_text") or ""
-        ingredients_found = obf.get("found", False)
-        logger.info(f"OBF ingredients found: {ingredients_found}")
+        # ── 4. Ingredient source: Textract (image) or Open Beauty Facts ──────
+        ingredients_text = ""
+        ingredients_found = False
+
+        if req.image_base64:
+            logger.info("Phase 4: uploading label photo to S3 → Textract")
+            s3_key = upload_photo(req.image_base64, f"{uuid.uuid4().hex}.jpg")
+
+            if s3_key:
+                textract = extract_ingredients_from_s3(s3_key)
+                ingredients_text = textract.get("ingredients_text", "")
+                ingredients_found = textract.get("found", False)
+                if ingredients_found:
+                    logger.info("Textract: ingredients extracted from label")
+                else:
+                    logger.info("Textract: no ingredients found — falling back to OBF")
+            else:
+                logger.warning("S3 upload failed — using OBF fallback")
+
+            # Fall back to OBF if Textract came up empty
+            if not ingredients_text:
+                obf = fetch_ingredients(req.product_name)
+                ingredients_text = obf.get("ingredients_text") or ""
+                ingredients_found = obf.get("found", False)
+        else:
+            # Standard path: Open Beauty Facts
+            obf = fetch_ingredients(req.product_name)
+            ingredients_text = obf.get("ingredients_text") or ""
+            ingredients_found = obf.get("found", False)
+            logger.info(f"OBF ingredients found: {ingredients_found}")
 
         if not ingredients_text:
-            ingredients_text = "Ingredient list not available in Open Beauty Facts database."
+            ingredients_text = "Ingredient list not available."
 
         # ── 5. Nova Act: brand claims only (1 session) ───────────────────────
         nova_result = run_nova_act_parallel(req.product_name)
@@ -116,13 +157,14 @@ async def analyze(req: AnalyzeRequest):
             "skin_type": skin_type,
             "skin_type_inferred": skin_type_inferred,
             "brand_claims": brand_claims,
-            "amazon_price": None,       # Phase 3: restore via alternatives endpoint
+            "amazon_price": None,
             "ingredients_found": ingredients_found,
             "cached": False,
         }
 
-        # ── 8. Save to cache with embedding ──────────────────────────────────
+        # ── 8. Save to Supabase cache + S3 analyses bucket ───────────────────
         save_to_cache(req.product_name, skin_type, analysis, embedding=embedding)
+        save_analysis(req.product_name, skin_type, result)
 
         return result
 

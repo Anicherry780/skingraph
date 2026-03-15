@@ -232,6 +232,9 @@ const Home: React.FC = () => {
             {uploadedImage && !selectedSkinType && (
               <p className="upload-hint">Skin type will be detected from the label</p>
             )}
+            <p className="upload-privacy">
+              🔒 Uploaded photos are automatically deleted within 24 hours.
+            </p>
           </section>
 
           {/* Routine compatibility toggle — optional */}

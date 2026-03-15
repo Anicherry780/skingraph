@@ -179,6 +179,12 @@
   padding: 8px 12px;
 }
 
+.upload-privacy {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 /* ===== Compatibility toggle ===== */
 .compatibility-toggle-row {
   display: flex;

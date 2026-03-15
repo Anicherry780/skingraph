@@ -132,41 +132,55 @@ async def analyze(req: AnalyzeRequest):
         ingredients_found = False
 
         all_images = req.get_all_images()
-        if all_images:
-            logger.info(f"Phase 4: processing {len(all_images)} image(s) through S3 → Textract")
+        logger.info(f"ANALYZE images: count={len(all_images)}, "
+                     f"images_base64_len={len(req.images_base64)}, "
+                     f"image_base64_present={req.image_base64 is not None}")
 
-            def _process_image(b64: str) -> dict:
+        if all_images:
+            logger.info(f"ANALYZE Phase 4: processing {len(all_images)} image(s), "
+                         f"sizes={[len(img) for img in all_images]} chars base64")
+
+            def _process_image(b64: str, idx: int) -> dict:
+                logger.info(f"ANALYZE _process_image[{idx}]: uploading {len(b64)} chars base64")
                 key = upload_photo(b64, f"{uuid.uuid4().hex}.jpg")
                 if not key:
+                    logger.error(f"ANALYZE _process_image[{idx}]: S3 upload FAILED")
                     return {"ingredients_text": "", "product_name_hint": "", "all_text": "", "found": False}
-                return extract_all_from_s3(key)
+                logger.info(f"ANALYZE _process_image[{idx}]: S3 key={key}, running Textract")
+                result = extract_all_from_s3(key)
+                logger.info(f"ANALYZE _process_image[{idx}]: Textract done, "
+                             f"found={result.get('found')}, "
+                             f"ingredients_len={len(result.get('ingredients_text', ''))}")
+                return result
 
             textract_results: list[dict] = []
             with ThreadPoolExecutor(max_workers=min(len(all_images), 5)) as ex:
-                futs = [ex.submit(_process_image, img) for img in all_images]
+                futs = [ex.submit(_process_image, img, i) for i, img in enumerate(all_images)]
                 for fut in futs:
                     try:
                         textract_results.append(fut.result())
                     except Exception as e:
-                        logger.warning(f"Image Textract failed: {e}")
+                        logger.error(f"ANALYZE image Textract exception: {e}", exc_info=True)
 
+            logger.info(f"ANALYZE: {len(textract_results)} Textract results collected")
             merged = merge_textract_results(textract_results) if textract_results else {}
             ingredients_text = merged.get("ingredients_text", "")
             ingredients_found = merged.get("found", False)
 
             if not ingredients_text:
-                logger.info("Textract found no ingredients — falling back to OBF")
+                logger.warning("ANALYZE: Textract found NO ingredients in any photo — falling back to OBF")
                 obf = fetch_ingredients(display_name)
                 ingredients_text = obf.get("ingredients_text") or ""
                 ingredients_found = obf.get("found", False)
+                logger.info(f"ANALYZE OBF fallback: found={ingredients_found}")
             else:
-                logger.info(f"Textract merged ingredients (len={len(ingredients_text)})")
+                logger.info(f"ANALYZE: Textract SUCCESS, ingredients_len={len(ingredients_text)}")
         else:
-            # Standard path: Open Beauty Facts
+            logger.info("ANALYZE: no images, using Open Beauty Facts")
             obf = fetch_ingredients(display_name)
             ingredients_text = obf.get("ingredients_text") or ""
             ingredients_found = obf.get("found", False)
-            logger.info(f"OBF ingredients found: {ingredients_found}")
+            logger.info(f"ANALYZE OBF: found={ingredients_found}")
 
         if not ingredients_text:
             ingredients_text = "Ingredient list not available."

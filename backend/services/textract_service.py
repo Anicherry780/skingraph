@@ -16,9 +16,19 @@ logger = logging.getLogger(__name__)
 
 UPLOADS_BUCKET = "skingraph-uploads"
 
-# Header pattern — "Ingredients:", "Active Ingredients:", "Other Ingredients:"
+# Header pattern — colon/period is OPTIONAL (Textract often drops it)
+# Matches: "Ingredients:", "Ingredients.", "Ingredients", "INGREDIENTS",
+#          "Active Ingredients:", "Other Ingredients", etc.
 _INGREDIENT_HEADER = re.compile(
-    r"(active\s+ingredients?|other\s+ingredients?|inactive\s+ingredients?|ingredients?)\s*[:\.]",
+    r"(active\s+ingredients?|other\s+ingredients?|inactive\s+ingredients?|ingredients?)"
+    r"\s*[:\.\-]?\s*",
+    re.IGNORECASE,
+)
+
+# Strict version: line IS the header (possibly with colon), nothing else meaningful
+_INGREDIENT_HEADER_STANDALONE = re.compile(
+    r"^\s*(active\s+ingredients?|other\s+ingredients?|inactive\s+ingredients?|ingredients?)"
+    r"\s*[:\.\-]?\s*$",
     re.IGNORECASE,
 )
 
@@ -26,14 +36,14 @@ _INGREDIENT_HEADER = re.compile(
 _SECTION_BREAK = re.compile(
     r"^(direction|how\s+to\s+use|warning|caution|storage|for\s+all\s+type|for\s+external"
     r"|keep\s+out|do\s+not|b\.?\s*no|batch|manufactured|distributed|net\s+wt|net\s+content"
-    r"|patch\s+test|shelf\s+life)",
+    r"|patch\s+test|shelf\s+life|usage|apply|best\s+before|expiry|mfg|mfd)",
     re.IGNORECASE,
 )
 
 # Lines to skip when extracting product name
 _NAME_SKIP = re.compile(
     r"(ingredients?|active|directions?|warnings?|caution|storage|how\s+to"
-    r"|\b\d{4,}\b|\blot\b|\bexp\b|\bmfg\b|\bwww\.\|\.com)",
+    r"|\b\d{4,}\b|\blot\b|\bexp\b|\bmfg\b|www\.|\.com)",
     re.IGNORECASE,
 )
 
@@ -69,62 +79,88 @@ def _extract_product_name(lines: list[str]) -> str:
         stripped = line.strip()
         if not stripped:
             continue
-        # Skip very short or very long lines
         if len(stripped) < 3 or len(stripped) > 60:
             continue
-        # Skip lines with many commas (ingredient lists)
         if stripped.count(",") > 3:
             continue
-        # Skip numbers-only, barcodes
         if re.match(r'^[\d\s\-\.]+$', stripped):
             continue
-        # Skip known section headers
         if _NAME_SKIP.search(stripped):
             continue
-        if _INGREDIENT_HEADER.search(stripped):
+        # Skip standalone ingredient headers
+        if _INGREDIENT_HEADER_STANDALONE.match(stripped):
             continue
         candidates.append(stripped)
         if len(candidates) >= 2:
             break
-    return " ".join(candidates)
+    result = " ".join(candidates)
+    logger.info(f"  _extract_product_name candidates={candidates} → {repr(result)}")
+    return result
 
 
 def _parse_ingredients_from_lines(lines: list[str], s3_key: str = "") -> tuple[str, bool]:
     """
     Parse ingredient block from sorted lines.
+    Strategy:
+      1. Look for a line containing an ingredient header keyword
+      2. If the header line also has text after the keyword → capture it (inline)
+      3. If the header is standalone → capture all subsequent lines until section break
     Returns (ingredients_text, found).
     """
     capturing = False
     ingredient_parts: list[str] = []
+    header_line_idx = -1
 
     for i, line in enumerate(lines):
         stripped = line.strip()
 
         if not capturing:
+            # Check for standalone header first (e.g., "INGREDIENTS" alone on a line)
+            if _INGREDIENT_HEADER_STANDALONE.match(stripped):
+                logger.info(f"  PARSE [{i:02d}] ★ Standalone header: {repr(stripped)}")
+                capturing = True
+                header_line_idx = i
+                continue
+
+            # Check for inline header (e.g., "Ingredients: Water, Glycerin...")
             m = _INGREDIENT_HEADER.search(stripped)
             if m:
-                logger.info(f"  [{i:02d}] Header match: {repr(stripped)}")
                 capturing = True
-                # Grab anything after the colon/period on the same line
+                header_line_idx = i
                 after = stripped[m.end():].strip().rstrip(".")
-                if after:
-                    logger.info(f"  [{i:02d}] Inline ingredients: {repr(after)}")
+                if after and len(after) > 2:
+                    logger.info(f"  PARSE [{i:02d}] ★ Inline header+ingredients: {repr(stripped)}")
+                    logger.info(f"  PARSE [{i:02d}]   Captured after header: {repr(after)}")
                     ingredient_parts.append(after)
-            else:
-                logger.info(f"  [{i:02d}] (pre-header) {repr(stripped)}")
+                else:
+                    logger.info(f"  PARSE [{i:02d}] ★ Header (no inline): {repr(stripped)}")
+                continue
+
+            logger.info(f"  PARSE [{i:02d}] (skip) {repr(stripped)}")
             continue
 
-        # Check for section break
+        # We are capturing ingredients
         if _SECTION_BREAK.search(stripped):
-            logger.info(f"  [{i:02d}] Section break: {repr(stripped)}")
+            logger.info(f"  PARSE [{i:02d}] ■ Section break: {repr(stripped)}")
             break
 
-        logger.info(f"  [{i:02d}] Ingredient line: {repr(stripped)}")
+        # Skip empty lines
+        if not stripped:
+            continue
+
+        logger.info(f"  PARSE [{i:02d}] + Ingredient line: {repr(stripped)}")
         ingredient_parts.append(stripped)
 
     combined = " ".join(ingredient_parts)
-    # Clean up extra whitespace and trailing punctuation
     combined = re.sub(r"\s+", " ", combined).strip().rstrip(".")
+
+    logger.info(
+        f"  PARSE result: found={bool(combined)}, header_line={header_line_idx}, "
+        f"parts={len(ingredient_parts)}, length={len(combined)}"
+    )
+    if combined:
+        logger.info(f"  PARSE ingredients preview: {combined[:200]}{'...' if len(combined) > 200 else ''}")
+
     return combined, bool(combined)
 
 
@@ -132,42 +168,56 @@ def extract_all_from_s3(s3_key: str) -> dict:
     """
     Run Textract DETECT_DOCUMENT_TEXT on a photo in skingraph-uploads.
     Sorts blocks by Y position before parsing.
-
-    Returns:
-        {
-            "ingredients_text": str,
-            "product_name_hint": str,
-            "all_text":         str,
-            "found":            bool,
-        }
     """
+    logger.info(f"TEXTRACT START: bucket={UPLOADS_BUCKET}, key={s3_key}")
+
     try:
-        resp = _textract_client().detect_document_text(
+        client = _textract_client()
+        logger.info(f"TEXTRACT: calling detect_document_text(Bucket={UPLOADS_BUCKET}, Key={s3_key})")
+        resp = client.detect_document_text(
             Document={"S3Object": {"Bucket": UPLOADS_BUCKET, "Name": s3_key}}
         )
+        logger.info(f"TEXTRACT: API call succeeded")
     except (BotoCoreError, ClientError) as e:
-        logger.warning(f"Textract error for '{s3_key}': {e}")
+        logger.error(f"TEXTRACT FAILED (boto error) for '{s3_key}': {e}")
         return {"ingredients_text": "", "product_name_hint": "", "all_text": "", "found": False}
     except Exception as e:
-        logger.warning(f"Textract unexpected error: {e}")
+        logger.error(f"TEXTRACT FAILED (unexpected) for '{s3_key}': {e}")
         return {"ingredients_text": "", "product_name_hint": "", "all_text": "", "found": False}
 
-    # Sort ALL LINE blocks by geometry before processing
-    all_blocks = [b for b in resp.get("Blocks", []) if b.get("BlockType") == "LINE"]
-    sorted_blocks = _sort_blocks_by_position(all_blocks)
+    # Count all block types for diagnostics
+    all_raw_blocks = resp.get("Blocks", [])
+    block_types = {}
+    for b in all_raw_blocks:
+        bt = b.get("BlockType", "UNKNOWN")
+        block_types[bt] = block_types.get(bt, 0) + 1
+    logger.info(f"TEXTRACT raw response: {len(all_raw_blocks)} blocks, types={block_types}")
+
+    # Filter LINE blocks and sort by Y position
+    line_blocks = [b for b in all_raw_blocks if b.get("BlockType") == "LINE"]
+    sorted_blocks = _sort_blocks_by_position(line_blocks)
     lines = [b["Text"] for b in sorted_blocks]
 
-    logger.info(f"Textract '{s3_key}': {len(lines)} lines (sorted by Y position)")
+    logger.info(f"TEXTRACT '{s3_key}': {len(lines)} LINE blocks (sorted by Y)")
+    logger.info("=" * 60)
     for i, line in enumerate(lines):
         geo = sorted_blocks[i].get("Geometry", {}).get("BoundingBox", {})
-        logger.info(f"  [{i:02d}] Y={geo.get('Top', 0):.3f} {repr(line)}")
+        y = geo.get("Top", 0)
+        logger.info(f"  LINE [{i:02d}] Y={y:.3f} | {repr(line)}")
+    logger.info("=" * 60)
 
     all_text = " ".join(lines)
+    logger.info(f"TEXTRACT all_text ({len(all_text)} chars): {all_text[:300]}{'...' if len(all_text) > 300 else ''}")
+
     product_name_hint = _extract_product_name(lines)
-    logger.info(f"  product_name_hint: {repr(product_name_hint)}")
+    logger.info(f"TEXTRACT product_name_hint: {repr(product_name_hint)}")
 
     ingredients_text, found = _parse_ingredients_from_lines(lines, s3_key)
-    logger.info(f"  ingredients found={found}, length={len(ingredients_text)}")
+    logger.info(f"TEXTRACT FINAL: found={found}, ingredients_len={len(ingredients_text)}")
+    if found:
+        logger.info(f"TEXTRACT ingredients: {ingredients_text[:300]}")
+    else:
+        logger.warning(f"TEXTRACT: NO INGREDIENTS FOUND in {len(lines)} lines from {s3_key}")
 
     return {
         "ingredients_text": ingredients_text,
@@ -180,9 +230,6 @@ def extract_all_from_s3(s3_key: str) -> dict:
 def merge_textract_results(results: list[dict]) -> dict:
     """
     Merge Textract results from multiple photos.
-    - Combines ingredient lists, deduplicating individual ingredients
-    - Takes product_name_hint from the result with the most text
-    - Marks found=True if any result found ingredients
     """
     all_ingredient_parts: list[str] = []
     best_product_name = ""
@@ -195,13 +242,11 @@ def merge_textract_results(results: list[dict]) -> dict:
             text = r.get("ingredients_text", "")
             if text:
                 all_ingredient_parts.append(text)
-        # Pick product name from photo with most text (most legible)
         at_len = len(r.get("all_text", ""))
         if at_len > best_all_text_len and r.get("product_name_hint"):
             best_all_text_len = at_len
             best_product_name = r["product_name_hint"]
 
-    # Deduplicate ingredients (split by comma, strip, lowercase compare)
     if all_ingredient_parts:
         seen: set[str] = set()
         unique: list[str] = []
@@ -215,6 +260,11 @@ def merge_textract_results(results: list[dict]) -> dict:
         merged_text = ", ".join(unique)
     else:
         merged_text = ""
+
+    logger.info(
+        f"MERGE: {len(results)} photos → found={found}, "
+        f"ingredients_len={len(merged_text)}, product_name={repr(best_product_name)}"
+    )
 
     return {
         "ingredients_text": merged_text,

@@ -105,6 +105,8 @@ def _parse_ingredients_from_lines(lines: list[str], s3_key: str = "") -> tuple[s
       1. Look for a line containing an ingredient header keyword
       2. If the header line also has text after the keyword → capture it (inline)
       3. If the header is standalone → capture all subsequent lines until section break
+      4. FALLBACK: if header regex finds nothing, scan ALL text for comma-heavy
+         blocks (ingredient lists always have many commas)
     Returns (ingredients_text, found).
     """
     capturing = False
@@ -153,6 +155,48 @@ def _parse_ingredients_from_lines(lines: list[str], s3_key: str = "") -> tuple[s
 
     combined = " ".join(ingredient_parts)
     combined = re.sub(r"\s+", " ", combined).strip().rstrip(".")
+
+    # ── FALLBACK: comma-heavy line detection ──────────────────────────────
+    # If regex-based parsing found nothing, scan all lines for comma-heavy
+    # blocks that look like ingredient lists (e.g., "Water, Glycerin, ...")
+    if not combined:
+        logger.info("  PARSE: header regex found nothing — trying comma-heavy fallback")
+        comma_parts: list[str] = []
+        in_comma_block = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            comma_count = stripped.count(",")
+
+            # A line with 2+ commas is likely an ingredient line
+            if comma_count >= 2:
+                if not in_comma_block:
+                    in_comma_block = True
+                    logger.info(f"  FALLBACK [{i:02d}] ★ Start comma block: {repr(stripped)}")
+                else:
+                    logger.info(f"  FALLBACK [{i:02d}] + Continue: {repr(stripped)}")
+                comma_parts.append(stripped)
+            elif in_comma_block and comma_count >= 1:
+                # Allow lines with 1 comma if we're already in a comma block
+                # (last line of ingredients often has fewer commas)
+                logger.info(f"  FALLBACK [{i:02d}] + Tail line: {repr(stripped)}")
+                comma_parts.append(stripped)
+            elif in_comma_block:
+                # No commas — end of block
+                logger.info(f"  FALLBACK [{i:02d}] ■ End comma block: {repr(stripped)}")
+                break
+
+        if comma_parts:
+            combined = " ".join(comma_parts)
+            combined = re.sub(r"\s+", " ", combined).strip().rstrip(".")
+            # Strip leading "INGREDIENTS:" or similar if captured within the line
+            m = _INGREDIENT_HEADER.match(combined)
+            if m:
+                combined = combined[m.end():].strip()
+            logger.info(f"  FALLBACK result: {len(comma_parts)} lines, {len(combined)} chars")
+            logger.info(f"  FALLBACK preview: {combined[:200]}")
 
     logger.info(
         f"  PARSE result: found={bool(combined)}, header_line={header_line_idx}, "

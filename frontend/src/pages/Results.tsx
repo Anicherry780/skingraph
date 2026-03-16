@@ -5,7 +5,7 @@ import RedFlagAlert from "../components/RedFlagAlert";
 import AlternativesGrid, { type Alternative } from "../components/AlternativesGrid";
 import CompatibilityChecker, { type CompatibilityResult } from "../components/CompatibilityChecker";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseEnabled } from "../lib/supabase";
 import "./Results.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ const Results: React.FC = () => {
       setResult(data);
 
       // Auto-save to user_analyses if logged in
-      if (user) {
+      if (user && supabaseEnabled) {
         await supabase.from("user_analyses").insert({
           user_id: user.id,
           product_name: data.product_name,
@@ -465,7 +465,7 @@ const Results: React.FC = () => {
           <div className="header-actions">
             <button className="header-action-btn" onClick={handleShare}>📋 <span>Share</span></button>
             <button className="header-action-btn" onClick={handleDownload}>📥 <span>Report</span></button>
-            {user && (
+            {user && supabaseEnabled && (
               <button
                 className={`header-action-btn ${isSaved ? "saved" : ""}`}
                 disabled={isSaved || saveLoading}

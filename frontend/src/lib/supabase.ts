@@ -1,12 +1,19 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-if (!supabaseUrl || !supabaseAnonKey) {
+/** True when both env vars are present — auth features are enabled */
+export const supabaseEnabled = !!(supabaseUrl && supabaseAnonKey);
+
+if (!supabaseEnabled) {
   console.warn(
-    "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — auth features will be disabled."
+    "[SkinGraph] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing — auth features disabled."
   );
 }
 
-export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
+// Create a real client only when env vars exist; otherwise a dummy placeholder
+// that will never actually be called (guarded by supabaseEnabled checks).
+export const supabase: SupabaseClient = supabaseEnabled
+  ? createClient(supabaseUrl!, supabaseAnonKey!)
+  : (null as unknown as SupabaseClient);

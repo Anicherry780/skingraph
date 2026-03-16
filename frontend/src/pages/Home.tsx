@@ -4,7 +4,7 @@ import ProductInput from "../components/ProductInput";
 import SkinTypeSelector from "../components/SkinTypeSelector";
 import type { InferenceResult } from "../utils/inferSkinType";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseEnabled } from "../lib/supabase";
 import "./Home.css";
 
 type SkinTypeOption = "oily" | "dry" | "combination" | "sensitive";
@@ -70,7 +70,7 @@ const Home: React.FC = () => {
 
   // Pre-fill skin type from user profile
   useEffect(() => {
-    if (!user) return;
+    if (!user || !supabaseEnabled) return;
     supabase
       .from("user_profiles")
       .select("skin_type")

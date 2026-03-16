@@ -338,10 +338,46 @@
 
 /* ── Ingredients grid wrapper ───────────────────────────────────────────── */
 
+.ingredients-grid-wrapper {
+  position: relative;
+}
+
+.ingredients-grid-wrapper.collapsed::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, var(--bg));
+  pointer-events: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
 .ingredients-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 10px;
+}
+
+.btn-show-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.btn-show-more:hover {
+  border-color: var(--green);
+  background: var(--green-light);
 }
 
 /* ── Brand vs Reality ───────────────────────────────────────────────────── */

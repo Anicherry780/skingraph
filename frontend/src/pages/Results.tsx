@@ -124,6 +124,61 @@ function ScoreCircle({ score }: { score: number }) {
   );
 }
 
+// ── Collapsible Ingredients Section ──────────────────────────────────────
+
+const INGREDIENTS_COLLAPSED_COUNT = 8;
+
+function IngredientsSection({
+  ingredients,
+  ingredientsFound,
+  ingredientSource,
+}: {
+  ingredients: Ingredient[];
+  ingredientsFound: boolean;
+  ingredientSource?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = ingredients.length > INGREDIENTS_COLLAPSED_COUNT;
+  const visible = expanded ? ingredients : ingredients.slice(0, INGREDIENTS_COLLAPSED_COUNT);
+  const remaining = ingredients.length - INGREDIENTS_COLLAPSED_COUNT;
+
+  return (
+    <section className="r-section">
+      <h2 className="section-title">🧪 Ingredient Breakdown</h2>
+      {!ingredientsFound && ingredientSource !== "estimated" && ingredientSource !== "web_research" && (
+        <p className="note-text">
+          ℹ️ Exact ingredient list not found — analysis based on common formulation for this product type.
+        </p>
+      )}
+      <div className={`ingredients-grid-wrapper${!expanded && hasMore ? " collapsed" : ""}`}>
+        <div className="ingredients-grid">
+          {visible.map((ing, i) => (
+            <IngredientCard
+              key={i}
+              name={ing.name}
+              category={ing.category}
+              is_flagged={ing.is_flagged}
+              flag_reason={ing.flag_reason}
+              description={ing.description}
+              irritant_risk={ing.irritant_risk ?? "none"}
+              comedogenic_rating={ing.comedogenic_rating ?? 0}
+              safe_for_skin_type={ing.safe_for_skin_type ?? "safe"}
+            />
+          ))}
+        </div>
+      </div>
+      {hasMore && (
+        <button
+          className="btn-show-more"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? "Show less ↑" : `Show ${remaining} more ingredients ↓`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 const Results: React.FC = () => {
@@ -424,29 +479,11 @@ const Results: React.FC = () => {
 
           {/* ── Ingredient breakdown ────────────────────────────────────── */}
           {result.ingredients.length > 0 && (
-            <section className="r-section">
-              <h2 className="section-title">🧪 Ingredient Breakdown</h2>
-              {!result.ingredients_found && result.ingredient_source !== "estimated" && result.ingredient_source !== "web_research" && (
-                <p className="note-text">
-                  ℹ️ Exact ingredient list not found — analysis based on common formulation for this product type.
-                </p>
-              )}
-              <div className="ingredients-grid">
-                {result.ingredients.map((ing, i) => (
-                  <IngredientCard
-                    key={i}
-                    name={ing.name}
-                    category={ing.category}
-                    is_flagged={ing.is_flagged}
-                    flag_reason={ing.flag_reason}
-                    description={ing.description}
-                    irritant_risk={ing.irritant_risk ?? "none"}
-                    comedogenic_rating={ing.comedogenic_rating ?? 0}
-                    safe_for_skin_type={ing.safe_for_skin_type ?? "safe"}
-                  />
-                ))}
-              </div>
-            </section>
+            <IngredientsSection
+              ingredients={result.ingredients}
+              ingredientsFound={result.ingredients_found}
+              ingredientSource={result.ingredient_source}
+            />
           )}
 
           {/* ── Brand vs Reality ────────────────────────────────────────── */}

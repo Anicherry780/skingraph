@@ -5,34 +5,6 @@
   align-items: center;
   padding: 40px 16px 32px;
   background: var(--bg-secondary);
-  position: relative;
-  overflow: hidden;
-}
-
-/* ===== Subtle animated background ===== */
-.home-container::before {
-  content: "";
-  position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(255, 200, 150, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(255, 170, 150, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(190, 140, 100, 0.05) 0%, transparent 50%);
-  animation: bg-drift 20s ease-in-out infinite alternate;
-  z-index: 0;
-  pointer-events: none;
-}
-@keyframes bg-drift {
-  0%   { transform: translate(0, 0) rotate(0deg); }
-  100% { transform: translate(30px, -20px) rotate(3deg); }
-}
-
-.home-container > * {
-  position: relative;
-  z-index: 1;
 }
 
 /* ===== Header ===== */
@@ -72,13 +44,11 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-secondary);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 4px 12px;
   margin-top: 4px;
-  box-shadow: 0 0 12px var(--glow-tan);
-  backdrop-filter: blur(8px);
 }
 
 /* ===== Main form card ===== */
@@ -88,15 +58,14 @@
 }
 
 .form-card {
-  background: var(--glass-bg);
+  background: var(--bg);
   border-radius: var(--radius);
-  box-shadow: var(--shadow), 0 0 30px var(--glow-tan);
-  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
   padding: 28px 24px;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  backdrop-filter: blur(10px);
 }
 
 .form-section {
@@ -142,7 +111,6 @@
   border-color: var(--green);
   color: var(--green-dark);
   background: var(--green-light);
-  box-shadow: 0 0 15px var(--glow-peach);
 }
 
 /* ===== Upload section ===== */
@@ -179,21 +147,18 @@
   border-color: var(--green);
   background: var(--green-light);
   color: var(--green-dark);
-  box-shadow: 0 0 20px var(--glow-peach);
 }
 
 .drop-zone.drag-over {
   border-color: var(--green);
   background: var(--green-light);
   color: var(--green-dark);
-  box-shadow: 0 0 25px var(--glow-peach), 0 0 50px rgba(255, 200, 150, 0.3);
 }
 
 .drop-zone.has-file {
   border-style: solid;
   border-color: var(--green);
   background: var(--green-light);
-  box-shadow: 0 0 20px var(--glow-green);
 }
 
 .upload-prompt {
@@ -335,11 +300,9 @@
 
 .analyze-btn:not(.disabled):not(.loading):hover {
   background: #18896a;
-  box-shadow: 0 0 25px var(--glow-peach), 0 0 50px rgba(255, 200, 150, 0.3);
 }
 
 .analyze-btn:not(.disabled):not(.loading):active {
-  box-shadow: 0 0 40px var(--glow-gold), 0 0 80px rgba(220, 170, 100, 0.4);
   transform: scale(0.98);
 }
 
@@ -414,7 +377,6 @@
   border-color: var(--green);
   color: var(--green-dark);
   background: var(--green-light);
-  box-shadow: 0 0 15px var(--glow-peach);
 }
 
 .camera-preview-wrap {
@@ -556,7 +518,6 @@
   object-fit: cover;
   border-radius: var(--radius-sm);
   border: 1.5px solid var(--green);
-  box-shadow: 0 0 12px var(--glow-green);
   display: block;
 }
 

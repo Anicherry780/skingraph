@@ -35,19 +35,18 @@
 /* ── Card ────────────────────────────────────────────────────────────────── */
 
 .alt-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   position: relative;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s;
 }
 .alt-card:hover {
   border-color: var(--green);
-  box-shadow: 0 0 20px var(--glow-peach);
 }
 
 .alt-match-badge {
@@ -60,7 +59,6 @@
   color: var(--green-dark);
   border-radius: 10px;
   padding: 2px 8px;
-  box-shadow: 0 0 8px var(--glow-gold);
 }
 
 .alt-brand {
@@ -132,7 +130,6 @@
   color: var(--green-dark);
   background: var(--green-light);
   text-decoration: none;
-  box-shadow: 0 0 12px var(--glow-peach);
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */

@@ -9,8 +9,8 @@
   gap: 4px;
   transition: box-shadow 0.2s;
 }
-.red-flag-card.sev-high   { border-color: var(--red);   background: #FFF3F3; box-shadow: 0 0 15px var(--glow-rose); }
-.red-flag-card.sev-medium { border-color: var(--amber);  background: #FFFBF2; box-shadow: 0 0 10px rgba(255, 170, 150, 0.3); }
+.red-flag-card.sev-high   { border-color: var(--red);   background: #FFF3F3; }
+.red-flag-card.sev-medium { border-color: var(--amber);  background: #FFFBF2; }
 .red-flag-card.sev-low    { border-color: #9CA3AF;       background: #F9FAFB; }
 
 .flag-top {

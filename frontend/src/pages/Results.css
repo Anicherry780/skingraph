@@ -14,12 +14,11 @@
   align-items: center;
   gap: 16px;
   padding: 14px 24px;
-  background: var(--glass-bg);
-  border-bottom: 1px solid var(--glass-border);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
-  backdrop-filter: blur(12px);
 }
 
 .back-btn {
@@ -72,7 +71,6 @@
 .header-action-btn:hover {
   border-color: var(--green);
   color: var(--green-dark);
-  box-shadow: 0 0 12px var(--glow-tan);
 }
 
 /* ── Toast notification ────────────────────────────────────────────────── */
@@ -89,7 +87,7 @@
   font-size: 14px;
   font-weight: 500;
   z-index: 100;
-  box-shadow: 0 4px 20px var(--glow-green);
+  box-shadow: 0 4px 20px rgba(29, 158, 117, 0.3);
   animation: toast-in 0.3s ease, toast-out 0.3s ease 1.7s forwards;
 }
 
@@ -128,8 +126,8 @@
 }
 
 .skeleton-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px;
   overflow: hidden;
@@ -138,7 +136,7 @@
 .skeleton-line {
   height: 14px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #F5E6D3, #EDD5BC, #F5E6D3);
+  background: linear-gradient(90deg, #f0f0f0, #e0e0e0, #f0f0f0);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
 }
@@ -151,7 +149,7 @@
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background: linear-gradient(90deg, #F5E6D3, #EDD5BC, #F5E6D3);
+  background: linear-gradient(90deg, #f0f0f0, #e0e0e0, #f0f0f0);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   flex-shrink: 0;
@@ -172,7 +170,7 @@
 .skeleton-grid-item {
   height: 80px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, #F5E6D3, #EDD5BC, #F5E6D3);
+  background: linear-gradient(90deg, #f0f0f0, #e0e0e0, #f0f0f0);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
 }
@@ -227,7 +225,6 @@
 .loading-step-item.active .step-indicator {
   background: var(--green-light);
   border-color: var(--green);
-  box-shadow: 0 0 10px var(--glow-peach);
 }
 
 .loading-step-item.done .step-indicator {
@@ -362,12 +359,11 @@
 /* ── Product header card ────────────────────────────────────────────────── */
 
 .product-header {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px 24px;
-  box-shadow: var(--shadow), 0 0 30px var(--glow-tan);
-  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
 }
 .product-header-top {
   display: flex;
@@ -434,12 +430,11 @@
   display: flex;
   align-items: center;
   gap: 28px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px;
-  box-shadow: var(--shadow), 0 0 30px var(--glow-tan);
-  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
 }
 
 .score-circle-wrapper {
@@ -467,14 +462,6 @@
   font-weight: 500;
 }
 
-/* Score circle glow */
-.score-circle-wrapper.glow-good {
-  filter: drop-shadow(0 0 12px var(--glow-gold));
-}
-.score-circle-wrapper.glow-bad {
-  filter: drop-shadow(0 0 12px var(--glow-rose));
-}
-
 .score-info { flex: 1; }
 .score-label-text {
   font-size: 20px;
@@ -490,12 +477,11 @@
 /* ── Generic section card — glass ──────────────────────────────────────── */
 
 .r-section {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px;
-  box-shadow: var(--shadow), 0 0 30px var(--glow-tan);
-  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -548,7 +534,7 @@
   left: 0;
   right: 0;
   height: 60px;
-  background: linear-gradient(transparent, var(--glass-bg));
+  background: linear-gradient(transparent, var(--bg));
   pointer-events: none;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }

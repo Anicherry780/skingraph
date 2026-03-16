@@ -67,9 +67,9 @@ function scoreColor(score: number) {
 function scoreLabel(score: number, skinType: string) {
   const skin = SKIN_TYPE_LABELS[skinType] ?? skinType;
   if (score >= 80) return `Great for ${skin} skin`;
-  if (score >= 65) return `Suitable for ${skin} skin`;
-  if (score >= 50) return `Decent for ${skin} skin`;
-  if (score >= 35) return "Mixed results";
+  if (score >= 65) return `Good for ${skin} skin`;
+  if (score >= 50) return `Use with caution for ${skin} skin`;
+  if (score >= 35) return `Not ideal for ${skin} skin`;
   return `Not recommended for ${skin} skin`;
 }
 
@@ -82,8 +82,6 @@ function ScoreCircle({ score }: { score: number }) {
   const r = 52;
   const circumference = 2 * Math.PI * r;
   const offset = circumference - (animated / 100) * circumference;
-  const glowClass = score >= 50 ? "glow-good" : "glow-bad";
-
   // Animate circle stroke
   useEffect(() => {
     const t = setTimeout(() => setAnimated(score), 120);
@@ -111,7 +109,7 @@ function ScoreCircle({ score }: { score: number }) {
   }, [score]);
 
   return (
-    <div className={`score-circle-wrapper ${glowClass}`}>
+    <div className="score-circle-wrapper">
       <svg className="score-svg" viewBox="0 0 120 120" width="140" height="140">
         <circle cx="60" cy="60" r={r} fill="none" stroke="#E5E7EB" strokeWidth="10" />
         <circle

@@ -3,7 +3,8 @@ POST /api/alternatives
 
 Uses Nova 2 Lite to suggest 3 real, cheaper alternatives with similar active ingredients.
 No product database needed — Nova knows skincare products from training data.
-Match percentages are calculated from real ingredient overlap, not AI estimates.
+Match percentages use recall-based formula (shared / original product ingredients),
+answering "how much of your product's formula does this alternative cover?"
 """
 
 import json
@@ -41,7 +42,12 @@ def _normalize_ingredient(name: str) -> str:
 
 def _calculate_match(original_ingredients: List[str], alt_ingredients: List[str]) -> dict:
     """
-    Calculate real ingredient overlap between original and alternative.
+    Calculate real ingredient overlap using recall-based formula:
+    match % = (shared ingredients / original product ingredients) × 100
+
+    This answers: "How much of MY product's formula does this alternative cover?"
+    More intuitive than Jaccard for consumer-facing skincare comparison.
+
     Returns {"match_percent": int, "shared_count": int, "has_ingredients": bool}
     """
     if not alt_ingredients or not original_ingredients:
@@ -54,8 +60,7 @@ def _calculate_match(original_ingredients: List[str], alt_ingredients: List[str]
         return {"match_percent": 0, "shared_count": 0, "has_ingredients": False}
 
     shared = orig_set & alt_set
-    total_unique = len(orig_set | alt_set)
-    raw_pct = (len(shared) / total_unique) * 100 if total_unique > 0 else 0
+    raw_pct = (len(shared) / len(orig_set)) * 100 if len(orig_set) > 0 else 0
 
     # Round to nearest 5%
     match_pct = int(5 * round(raw_pct / 5))

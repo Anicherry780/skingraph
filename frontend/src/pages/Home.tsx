@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import ProductInput from "../components/ProductInput";
 import SkinTypeSelector from "../components/SkinTypeSelector";
 import type { InferenceResult } from "../utils/inferSkinType";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 import "./Home.css";
 
 type SkinTypeOption = "oily" | "dry" | "combination" | "sensitive";
@@ -21,6 +23,7 @@ const MAX_PHOTOS = 5;
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Primary product state
   const [productName, setProductName] = useState("");
@@ -64,6 +67,23 @@ const Home: React.FC = () => {
 
   // Analyze button enabled when product typed AND skin type selected
   const canAnalyze = productName.trim().length > 0 && selectedSkinType !== null;
+
+  // Pre-fill skin type from user profile
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_profiles")
+      .select("skin_type")
+      .eq("id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.skin_type && !selectedSkinType) {
+          setSelectedSkinType(data.skin_type as SkinTypeOption);
+          setIsInferred(true);
+          setInferredReason("From your saved skin profile");
+        }
+      });
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Two-level follow-up question logic
   const SECOND_LEVEL: Record<string, { question: string; options: string[] }> = {
@@ -402,9 +422,16 @@ const Home: React.FC = () => {
     <div className="home-container">
       {/* Header */}
       <header className="home-header">
-        <h1 className="logo">
-          Skin<span className="logo-green">Graph</span>
-        </h1>
+        <div className="header-top-row">
+          <h1 className="logo">
+            Skin<span className="logo-green">Graph</span>
+          </h1>
+          {user ? (
+            <Link to="/dashboard" className="auth-link">👤 Dashboard</Link>
+          ) : (
+            <Link to="/auth" className="auth-link">Sign in</Link>
+          )}
+        </div>
         <p className="tagline">Know exactly what&apos;s in your skincare</p>
         <span className="nova-badge">⚡ Powered by Amazon Nova</span>
       </header>

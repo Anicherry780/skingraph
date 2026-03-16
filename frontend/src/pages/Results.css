@@ -73,6 +73,13 @@
   color: var(--green-dark);
 }
 
+.header-action-btn.saved {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-light);
+  cursor: default;
+}
+
 /* ── Toast notification ────────────────────────────────────────────────── */
 
 .toast {

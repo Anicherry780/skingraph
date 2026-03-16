@@ -4,6 +4,8 @@ import IngredientCard from "../components/IngredientCard";
 import RedFlagAlert from "../components/RedFlagAlert";
 import AlternativesGrid, { type Alternative } from "../components/AlternativesGrid";
 import CompatibilityChecker, { type CompatibilityResult } from "../components/CompatibilityChecker";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 import "./Results.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -266,7 +268,9 @@ function IngredientsSection({
 const Results: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const payload = location.state?.payload;
+  const preloadedResult = location.state?.preloadedResult as AnalysisResult | undefined;
 
   // ── Main analysis state ────────────────────────────────────────────────
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -282,11 +286,15 @@ const Results: React.FC = () => {
   const [compatibility, setCompatibility] = useState<CompatibilityResult | null>(null);
   const [compatLoading, setCompatLoading] = useState(false);
 
-  // ── Share/download state ──────────────────────────────────────────────
+  // ── Share/download/save state ──────────────────────────────────────────
   const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState("✅ Link copied!");
+  const [isSaved, setIsSaved] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href).then(() => {
+      setToastMsg("✅ Link copied!");
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
     });
@@ -335,6 +343,17 @@ const Results: React.FC = () => {
       }
       const data: AnalysisResult = await resp.json();
       setResult(data);
+
+      // Auto-save to user_analyses if logged in
+      if (user) {
+        await supabase.from("user_analyses").insert({
+          user_id: user.id,
+          product_name: data.product_name,
+          skin_type: data.skin_type,
+          score: data.suitability_score,
+          analysis_result: data,
+        });
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
     } finally {
@@ -348,6 +367,14 @@ const Results: React.FC = () => {
     if (!payload) { navigate("/"); return; }
     if (hasFetched.current) return;
     hasFetched.current = true;
+
+    // If navigated from dashboard with preloaded data, skip API call
+    if (preloadedResult) {
+      setResult(preloadedResult as AnalysisResult);
+      setLoading(false);
+      return;
+    }
+
     runAnalysis(payload);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -438,12 +465,36 @@ const Results: React.FC = () => {
           <div className="header-actions">
             <button className="header-action-btn" onClick={handleShare}>📋 <span>Share</span></button>
             <button className="header-action-btn" onClick={handleDownload}>📥 <span>Report</span></button>
+            {user && (
+              <button
+                className={`header-action-btn ${isSaved ? "saved" : ""}`}
+                disabled={isSaved || saveLoading}
+                onClick={async () => {
+                  if (!result || !user) return;
+                  setSaveLoading(true);
+                  await supabase.from("user_saved_products").insert({
+                    user_id: user.id,
+                    product_name: result.product_name,
+                    skin_type: result.skin_type,
+                    score: result.suitability_score,
+                    analysis_result: result,
+                  });
+                  setIsSaved(true);
+                  setSaveLoading(false);
+                  setToastMsg("✅ Saved to your profile!");
+                  setShowToast(true);
+                  setTimeout(() => setShowToast(false), 2000);
+                }}
+              >
+                {isSaved ? "✓ Saved" : "🔖"} <span>{isSaved ? "Saved" : "Save"}</span>
+              </button>
+            )}
           </div>
         )}
       </header>
 
       {/* Toast */}
-      {showToast && <div className="toast">✅ Link copied!</div>}
+      {showToast && <div className="toast">{toastMsg}</div>}
 
       {/* ── Loading skeleton ────────────────────────────────────────────── */}
       {loading && (

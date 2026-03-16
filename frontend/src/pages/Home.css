@@ -15,6 +15,33 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.auth-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  transition: all 0.2s;
+}
+
+.auth-link:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
+  background: var(--green-light);
+  text-decoration: none;
 }
 
 .logo {

@@ -20,12 +20,13 @@ CREATE TABLE IF NOT EXISTS product_analyses (
     created_at       timestamptz DEFAULT now()
 );
 
--- 3. Vector similarity search function
+-- 3. Vector similarity search function (with TTL filter)
 CREATE OR REPLACE FUNCTION match_product_analyses(
     query_embedding  vector(1024),
     skin_type_filter text,
     match_threshold  float,
-    match_count      int
+    match_count      int,
+    ttl_cutoff       timestamptz DEFAULT now() - interval '3 hours'
 )
 RETURNS TABLE (id uuid, analysis_result jsonb, similarity float)
 LANGUAGE sql STABLE AS $$
@@ -34,9 +35,24 @@ LANGUAGE sql STABLE AS $$
     FROM   product_analyses
     WHERE  skin_type = skin_type_filter
       AND  embedding IS NOT NULL
+      AND  created_at >= ttl_cutoff
       AND  1 - (embedding <=> query_embedding) > match_threshold
     ORDER BY embedding <=> query_embedding
     LIMIT  match_count;
+$$;
+
+-- 4. Auto-cleanup: delete stale rows older than 3 hours
+--    Run this via pg_cron or call manually:
+-- SELECT cron.schedule('cleanup-stale-cache', '0 * * * *',
+--   $$DELETE FROM product_analyses WHERE created_at < now() - interval '3 hours'$$
+-- );
+
+-- 5. Size check helper (returns total bytes of analysis_result column)
+CREATE OR REPLACE FUNCTION cache_total_bytes()
+RETURNS bigint
+LANGUAGE sql STABLE AS $$
+    SELECT COALESCE(SUM(octet_length(analysis_result::text)), 0)
+    FROM product_analyses;
 $$;
 ─────────────────────────────────────────────────────────────────
 """
@@ -45,6 +61,7 @@ import hashlib
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import boto3
@@ -53,6 +70,8 @@ logger = logging.getLogger(__name__)
 
 TITAN_EMBED_MODEL = "amazon.titan-embed-text-v2:0"
 CACHE_SIMILARITY_THRESHOLD = 0.92   # cosine similarity ≥ 0.92 = cache hit
+CACHE_TTL_HOURS = 3                 # entries older than 3 hours are stale
+CACHE_MAX_BYTES = 8 * 1024 * 1024   # 8 MB total cache size limit
 
 
 # ── Supabase ────────────────────────────────────────────────────────────────
@@ -128,6 +147,9 @@ def check_cache(
     if not db:
         return None
 
+    ttl_cutoff = datetime.now(timezone.utc) - timedelta(hours=CACHE_TTL_HOURS)
+    ttl_cutoff_iso = ttl_cutoff.isoformat()
+
     # ── 1. Vector similarity lookup ────────────────────────────────────────
     if embedding:
         try:
@@ -138,6 +160,7 @@ def check_cache(
                     "skin_type_filter": skin_type,
                     "match_threshold": CACHE_SIMILARITY_THRESHOLD,
                     "match_count": 1,
+                    "ttl_cutoff": ttl_cutoff_iso,
                 },
             ).execute()
 
@@ -155,13 +178,14 @@ def check_cache(
         except Exception as e:
             logger.warning(f"Vector cache lookup failed, trying hash fallback: {e}")
 
-    # ── 2. Exact hash fallback ─────────────────────────────────────────────
+    # ── 2. Exact hash fallback (with TTL filter) ──────────────────────────
     try:
         key = _hash_key(product_name, skin_type)
         result = (
             db.table("product_analyses")
             .select("analysis_result")
             .eq("cache_key", key)
+            .gte("created_at", ttl_cutoff_iso)
             .limit(1)
             .execute()
         )
@@ -200,6 +224,48 @@ def save_to_cache(
         return
 
     try:
+        # ── Evict stale entries (older than TTL) before writing ────────────
+        ttl_cutoff = datetime.now(timezone.utc) - timedelta(hours=CACHE_TTL_HOURS)
+        try:
+            db.table("product_analyses") \
+              .delete() \
+              .lt("created_at", ttl_cutoff.isoformat()) \
+              .execute()
+            logger.info("Evicted stale cache entries (older than 3h)")
+        except Exception as e:
+            logger.warning(f"Stale eviction failed (non-fatal): {e}")
+
+        # ── Enforce 8 MB size limit — evict oldest until under budget ─────
+        try:
+            size_result = db.rpc("cache_total_bytes", {}).execute()
+            total_bytes = size_result.data if isinstance(size_result.data, int) else 0
+            new_entry_bytes = len(json.dumps(analysis).encode("utf-8"))
+
+            if total_bytes + new_entry_bytes > CACHE_MAX_BYTES:
+                logger.info(
+                    f"Cache size {total_bytes / 1024:.0f}KB + new {new_entry_bytes / 1024:.0f}KB "
+                    f"exceeds {CACHE_MAX_BYTES / 1024 / 1024:.0f}MB — evicting oldest entries"
+                )
+                # Fetch oldest entries to delete
+                oldest = (
+                    db.table("product_analyses")
+                    .select("id, analysis_result")
+                    .order("created_at", desc=False)
+                    .limit(20)
+                    .execute()
+                )
+                freed = 0
+                for row_to_del in (oldest.data or []):
+                    if total_bytes + new_entry_bytes - freed <= CACHE_MAX_BYTES:
+                        break
+                    row_size = len(json.dumps(row_to_del["analysis_result"]).encode("utf-8"))
+                    db.table("product_analyses").delete().eq("id", row_to_del["id"]).execute()
+                    freed += row_size
+                logger.info(f"Evicted {freed / 1024:.0f}KB to stay under 8MB limit")
+        except Exception as e:
+            logger.warning(f"Size limit check failed (non-fatal): {e}")
+
+        # ── Write (upsert) ────────────────────────────────────────────────
         key = _hash_key(product_name, skin_type)
         row: dict = {
             "cache_key": key,

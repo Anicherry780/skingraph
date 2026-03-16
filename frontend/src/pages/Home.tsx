@@ -186,7 +186,7 @@ const Home: React.FC = () => {
     );
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const apiUrl = import.meta.env.VITE_API_URL || "https://skingraph-backend.onrender.com";
 
       // Simulate per-photo progress updates
       if (images.length > 1) {

@@ -134,11 +134,13 @@ def analyze_ingredients(
         return analysis
 
     except json.JSONDecodeError as e:
-        logger.error(f"Nova Lite JSON parse failed: {e} | raw: {raw_text[:200]}")
+        raw_preview = raw_text[:200] if 'raw_text' in dir() else "(no response)"
+        logger.error(f"Nova Lite JSON parse failed: {e} | raw: {raw_preview}")
         return _fallback_analysis(product_name, skin_type)
-    except client.exceptions.AccessDeniedException:
-        logger.error("Bedrock access denied — check IAM permissions and model access")
-        return _fallback_analysis(product_name, skin_type, error="bedrock_access_denied")
+    except Exception as e:
+        if "AccessDeniedException" in str(type(e).__name__) or "AccessDenied" in str(e):
+            logger.error("Bedrock access denied — check IAM permissions and model access")
+            return _fallback_analysis(product_name, skin_type, error="bedrock_access_denied")
     except Exception as e:
         logger.error(f"Nova Lite error: {e}", exc_info=True)
         return _fallback_analysis(product_name, skin_type)

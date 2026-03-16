@@ -5,9 +5,11 @@ const config: CapacitorConfig = {
   appName: 'SkinGraph',
   webDir: 'dist',
   server: {
+    // Load directly from the live production site — always up-to-date,
+    // has all env vars baked in by Cloudflare, no local rebuild needed.
+    url: 'https://skin.anirudhdev.com',
+    cleartext: false,
     androidScheme: 'https',
-    // In production, serve the local bundle (offline-capable)
-    // For dev, you can set url: 'http://YOUR_LOCAL_IP:5173' to live reload
   },
   plugins: {
     SplashScreen: {

@@ -71,7 +71,7 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
   const safeStyle = SAFE_STYLES[safe_for_skin_type] ?? SAFE_STYLES.safe;
 
   return (
-    <div className={`ingredient-card${is_flagged ? " flagged" : ""}`}>
+    <div className={`ingredient-card${is_flagged ? " flagged" : ""}${safe_for_skin_type === "caution" ? " caution-card" : ""}${safe_for_skin_type === "avoid" ? " avoid-card" : ""}`}>
       {/* Name + category */}
       <div className="ingredient-top">
         <span className="ingredient-name">{name}</span>

@@ -406,7 +406,7 @@ const Home: React.FC = () => {
           Skin<span className="logo-green">Graph</span>
         </h1>
         <p className="tagline">Know exactly what&apos;s in your skincare</p>
-        <span className="nova-badge">Powered by Amazon Nova</span>
+        <span className="nova-badge">⚡ Powered by Amazon Nova</span>
       </header>
 
       {/* Main form */}
@@ -421,6 +421,34 @@ const Home: React.FC = () => {
               disabled={isLoading}
             />
           </section>
+
+          {/* Demo product chips */}
+          {!productName.trim() && (
+            <div className="demo-chips">
+              {[
+                { name: "CeraVe Moisturising Cream", skin: "dry" as SkinTypeOption },
+                { name: "The Ordinary Niacinamide 10%", skin: "oily" as SkinTypeOption },
+                { name: "La Roche-Posay Cicaplast", skin: "sensitive" as SkinTypeOption },
+              ].map((demo) => (
+                <button
+                  key={demo.name}
+                  type="button"
+                  className="demo-chip"
+                  onClick={() => {
+                    setProductName(demo.name);
+                    setSelectedSkinType(demo.skin);
+                    setIsInferred(true);
+                    setInferredReason("Demo product");
+                    setFollowUp(getFollowUp(demo.name));
+                    setSelectedProductType(null);
+                    setSelectedFollowUp(null);
+                  }}
+                >
+                  ✨ Try: {demo.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Follow-up clarification pills — two-level cascade */}
           {followUp && followUp.level === 1 && (

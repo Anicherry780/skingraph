@@ -1,19 +1,34 @@
 /* ===== IngredientCard ================================================== */
 
 .ingredient-card {
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
-  background: var(--bg-secondary);
-  transition: border-color 0.15s;
+  background: var(--glass-bg);
+  transition: border-color 0.2s, box-shadow 0.2s;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.ingredient-card:hover  { border-color: var(--green); }
+/* Safety-based hover glow */
+.ingredient-card:hover {
+  border-color: var(--green);
+  box-shadow: 0 0 15px var(--glow-green);
+}
+.ingredient-card.caution-card:hover {
+  border-color: var(--amber);
+  box-shadow: 0 0 15px var(--glow-rose);
+}
+.ingredient-card.avoid-card:hover {
+  border-color: var(--red);
+  box-shadow: 0 0 15px rgba(220, 80, 80, 0.5);
+}
 .ingredient-card.flagged {
   border-color: #FECACA;
   background: #FFF8F8;
+}
+.ingredient-card.flagged:hover {
+  box-shadow: 0 0 15px var(--glow-rose);
 }
 
 /* Name + category row */

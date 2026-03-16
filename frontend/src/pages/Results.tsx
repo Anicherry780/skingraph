@@ -54,20 +54,7 @@ const SKIN_TYPE_LABELS: Record<string, string> = {
 
 const SKIN_TYPES = ["oily", "dry", "combination", "sensitive"] as const;
 
-const LOADING_STEPS_DEFAULT = [
-  "Looking up ingredients…",
-  "Running ingredient analysis…",
-  "Comparing brand claims…",
-  "Generating your report…",
-];
-
-const LOADING_STEPS_IMAGE = [
-  "Reading label text…",
-  "Extracting ingredients from photo…",
-  "Running ingredient analysis…",
-  "Comparing brand claims…",
-  "Generating your report…",
-];
+// Loading step constants moved into SkeletonLoading component
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,18 +77,41 @@ function scoreLabel(score: number, skinType: string) {
 
 function ScoreCircle({ score }: { score: number }) {
   const [animated, setAnimated] = useState(0);
+  const [displayNum, setDisplayNum] = useState(0);
   const color = scoreColor(score);
   const r = 52;
   const circumference = 2 * Math.PI * r;
   const offset = circumference - (animated / 100) * circumference;
+  const glowClass = score >= 50 ? "glow-good" : "glow-bad";
 
+  // Animate circle stroke
   useEffect(() => {
     const t = setTimeout(() => setAnimated(score), 120);
     return () => clearTimeout(t);
   }, [score]);
 
+  // Count-up animation for number
+  useEffect(() => {
+    if (score === 0) { setDisplayNum(0); return; }
+    let start = 0;
+    const duration = 1200;
+    const stepTime = 20;
+    const steps = duration / stepTime;
+    const increment = score / steps;
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= score) {
+        setDisplayNum(score);
+        clearInterval(timer);
+      } else {
+        setDisplayNum(Math.round(start));
+      }
+    }, stepTime);
+    return () => clearInterval(timer);
+  }, [score]);
+
   return (
-    <div className="score-circle-wrapper">
+    <div className={`score-circle-wrapper ${glowClass}`}>
       <svg className="score-svg" viewBox="0 0 120 120" width="140" height="140">
         <circle cx="60" cy="60" r={r} fill="none" stroke="#E5E7EB" strokeWidth="10" />
         <circle
@@ -117,8 +127,81 @@ function ScoreCircle({ score }: { score: number }) {
         />
       </svg>
       <div className="score-inner">
-        <span className="score-number" style={{ color }}>{score}</span>
+        <span className="score-number" style={{ color }}>{displayNum}</span>
         <span className="score-denom">/100</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Skeleton Loading ────────────────────────────────────────────────────
+
+const LOADING_STEP_LABELS_DEFAULT = [
+  "Looking up ingredients...",
+  "Analyzing with Amazon Nova...",
+  "Finding alternatives...",
+  "Analysis complete!",
+];
+
+const LOADING_STEP_LABELS_IMAGE = [
+  "Reading label text...",
+  "Extracting ingredients from photo...",
+  "Analyzing with Amazon Nova...",
+  "Finding alternatives...",
+  "Analysis complete!",
+];
+
+function SkeletonLoading({ productName, hasImage }: { productName: string; hasImage: boolean }) {
+  const steps = hasImage ? LOADING_STEP_LABELS_IMAGE : LOADING_STEP_LABELS_DEFAULT;
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setActiveStep((s) => Math.min(s + 1, steps.length - 1));
+    }, 3000);
+    return () => clearInterval(id);
+  }, [steps.length]);
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20, paddingTop: 24 }}>
+      {/* Step progress */}
+      <div className="loading-steps">
+        <p className="loading-product" style={{ textAlign: "center", marginBottom: 8 }}>{productName}</p>
+        {steps.map((label, i) => (
+          <div key={i} className={`loading-step-item${i === activeStep ? " active" : ""}${i < activeStep ? " done" : ""}`}>
+            <span className="step-indicator">
+              {i < activeStep ? "✓" : i === activeStep ? "●" : "○"}
+            </span>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Skeleton cards */}
+      <div className="skeleton-layout">
+        <div className="skeleton-card">
+          <div className="skeleton-line lg" />
+          <div className="skeleton-line sm" />
+        </div>
+        <div className="skeleton-card">
+          <div className="skeleton-row">
+            <div className="skeleton-circle" />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton-line lg" />
+              <div className="skeleton-line md" />
+              <div className="skeleton-line md" />
+            </div>
+          </div>
+        </div>
+        <div className="skeleton-card">
+          <div className="skeleton-line sm" />
+          <div className="skeleton-grid">
+            <div className="skeleton-grid-item" />
+            <div className="skeleton-grid-item" />
+            <div className="skeleton-grid-item" />
+            <div className="skeleton-grid-item" />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -153,17 +236,18 @@ function IngredientsSection({
       <div className={`ingredients-grid-wrapper${!expanded && hasMore ? " collapsed" : ""}`}>
         <div className="ingredients-grid">
           {visible.map((ing, i) => (
-            <IngredientCard
-              key={i}
-              name={ing.name}
-              category={ing.category}
-              is_flagged={ing.is_flagged}
-              flag_reason={ing.flag_reason}
-              description={ing.description}
-              irritant_risk={ing.irritant_risk ?? "none"}
-              comedogenic_rating={ing.comedogenic_rating ?? 0}
-              safe_for_skin_type={ing.safe_for_skin_type ?? "safe"}
-            />
+            <div key={i} className="ingredient-stagger" style={{ animationDelay: `${i * 60}ms` }}>
+              <IngredientCard
+                name={ing.name}
+                category={ing.category}
+                is_flagged={ing.is_flagged}
+                flag_reason={ing.flag_reason}
+                description={ing.description}
+                irritant_risk={ing.irritant_risk ?? "none"}
+                comedogenic_rating={ing.comedogenic_rating ?? 0}
+                safe_for_skin_type={ing.safe_for_skin_type ?? "safe"}
+              />
+            </div>
           ))}
         </div>
       </div>
@@ -190,7 +274,6 @@ const Results: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingStep, setLoadingStep] = useState(0);
   const hasFetched = useRef(false);
 
   // ── Phase 3: Alternatives state ────────────────────────────────────────
@@ -200,6 +283,28 @@ const Results: React.FC = () => {
   // ── Phase 3: Compatibility state ───────────────────────────────────────
   const [compatibility, setCompatibility] = useState<CompatibilityResult | null>(null);
   const [compatLoading, setCompatLoading] = useState(false);
+
+  // ── Share/download state ──────────────────────────────────────────────
+  const [showToast, setShowToast] = useState(false);
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+    });
+  };
+
+  const handleDownload = () => {
+    if (!result) return;
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeName = result.product_name.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
+    a.href = url;
+    a.download = `${safeName}_${result.skin_type}_skingraph.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const API_URL =
     import.meta.env.VITE_API_URL || "https://skingraph-backend.onrender.com";
@@ -254,17 +359,7 @@ const Results: React.FC = () => {
     runAnalysis({ ...payload, skin_type: newSkinType, skin_type_inferred: false });
   };
 
-  // ── Loading step ticker ────────────────────────────────────────────────
-
-  const loadingSteps = ((payload?.images_base64?.length ?? 0) > 0 || !!payload?.image_base64)
-    ? LOADING_STEPS_IMAGE
-    : LOADING_STEPS_DEFAULT;
-
-  useEffect(() => {
-    if (!loading) return;
-    const id = setInterval(() => setLoadingStep((s) => (s + 1) % loadingSteps.length), 2500);
-    return () => clearInterval(id);
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── Loading step ticker removed — now handled by SkeletonLoading ───
 
   // ── Fetch alternatives once main analysis completes ────────────────────
 
@@ -341,15 +436,23 @@ const Results: React.FC = () => {
       <header className="results-header">
         <button className="back-btn" onClick={() => navigate("/")}>← Back</button>
         <span className="logo-text">Skin<span className="logo-green">Graph</span></span>
+        {result && (
+          <div className="header-actions">
+            <button className="header-action-btn" onClick={handleShare}>📋 <span>Share</span></button>
+            <button className="header-action-btn" onClick={handleDownload}>📥 <span>Report</span></button>
+          </div>
+        )}
       </header>
 
-      {/* ── Loading ─────────────────────────────────────────────────────── */}
+      {/* Toast */}
+      {showToast && <div className="toast">✅ Link copied!</div>}
+
+      {/* ── Loading skeleton ────────────────────────────────────────────── */}
       {loading && (
-        <div className="state-center">
-          <div className="spinner" />
-          <p className="loading-product">{payload.product_name}</p>
-          <p className="loading-step">{loadingSteps[loadingStep]}</p>
-        </div>
+        <SkeletonLoading
+          productName={payload.product_name}
+          hasImage={((payload?.images_base64?.length ?? 0) > 0 || !!payload?.image_base64)}
+        />
       )}
 
       {/* ── Error ───────────────────────────────────────────────────────── */}

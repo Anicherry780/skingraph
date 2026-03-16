@@ -35,19 +35,19 @@
 /* ── Card ────────────────────────────────────────────────────────────────── */
 
 .alt-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   position: relative;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 .alt-card:hover {
   border-color: var(--green);
-  box-shadow: 0 2px 8px rgba(29, 158, 117, 0.12);
+  box-shadow: 0 0 20px var(--glow-peach);
 }
 
 .alt-match-badge {
@@ -60,6 +60,7 @@
   color: var(--green-dark);
   border-radius: 10px;
   padding: 2px 8px;
+  box-shadow: 0 0 8px var(--glow-gold);
 }
 
 .alt-brand {
@@ -119,16 +120,19 @@
 .alt-amazon-btn {
   display: inline-block;
   margin-top: auto;
-  padding-top: 8px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--green);
   text-decoration: none;
-  transition: color 0.15s;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
 }
 .alt-amazon-btn:hover {
   color: var(--green-dark);
-  text-decoration: underline;
+  background: var(--green-light);
+  text-decoration: none;
+  box-shadow: 0 0 12px var(--glow-peach);
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */

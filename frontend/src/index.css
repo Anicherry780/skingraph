@@ -14,6 +14,15 @@
   --radius:         12px;
   --radius-sm:      8px;
   --shadow:         0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.06);
+
+  /* Skin tone neon glow palette */
+  --glow-peach:     rgba(255, 200, 150, 0.6);
+  --glow-rose:      rgba(255, 170, 150, 0.6);
+  --glow-gold:      rgba(220, 170, 100, 0.6);
+  --glow-green:     rgba(45, 155, 114, 0.5);
+  --glow-tan:       rgba(190, 140, 100, 0.4);
+  --glass-bg:       rgba(255, 248, 240, 0.85);
+  --glass-border:   rgba(210, 180, 140, 0.3);
 }
 
 /* ===== Reset ===== */
@@ -27,6 +36,7 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {

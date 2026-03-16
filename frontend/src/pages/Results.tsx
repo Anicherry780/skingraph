@@ -126,7 +126,7 @@ function ScoreCircle({ score }: { score: number }) {
 
 // ── Collapsible Ingredients Section ──────────────────────────────────────
 
-const INGREDIENTS_COLLAPSED_COUNT = 8;
+const INGREDIENTS_COLLAPSED_COUNT = 12;
 
 function IngredientsSection({
   ingredients,

@@ -25,7 +25,7 @@ Type a product name or upload a label photo → SkinGraph extracts every ingredi
 | Service | Use |
 |---|---|
 | **Amazon Bedrock — Nova 2 Lite** | Ingredient classification + risk analysis per skin type |
-| **Amazon Bedrock — Nova Embeddings** | Semantic cache (avoid re-analyzing the same product twice) |
+| **Amazon Bedrock — Titan Embeddings V2** | Semantic cache (avoid re-analyzing the same product twice) |
 | **Amazon Nova Act** | Brand vs reality — validates marketing claims against science |
 | **Amazon Textract** | OCR — extracts ingredient lists from uploaded label photos |
 | **Amazon Rekognition** | CV — detects product name and type from label photos |
@@ -40,7 +40,7 @@ Type a product name or upload a label photo → SkinGraph extracts every ingredi
 | Frontend | React 19 + TypeScript + Vite → Cloudflare Pages |
 | Backend | FastAPI (Python 3.12) → Render |
 | Auth & DB | Supabase (Auth + Postgres + pgvector) |
-| AI | Amazon Bedrock (Nova 2 Lite + Embeddings + Act) |
+| AI | Amazon Bedrock (Nova 2 Lite + Titan Embeddings V2 + Act) |
 | CV / OCR | Amazon Rekognition + Textract |
 | Storage | Amazon S3 |
 | Android | Capacitor (WebView wrapper) |

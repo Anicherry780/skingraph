@@ -86,7 +86,7 @@ Scoring guide:
 - 0-39: Problematic — multiple ingredients that worsen {skin_type} skin
 
 Rules:
-- List the top 12 most important or interesting ingredients only
+- List ALL ingredients from the ingredient list — do not truncate or limit the count
 - Flag ingredients that are irritating, comedogenic, or counterproductive for {skin_type} skin
 - If ingredient list is unavailable, return score 50 and note it in summary
 - Be evidence-based. Avoid marketing language.
@@ -111,7 +111,7 @@ def analyze_ingredients(
         body = {
             "messages": [{"role": "user", "content": [{"text": prompt}]}],
             "inferenceConfig": {
-                "maxTokens": 2048,
+                "maxTokens": 4096,
                 "temperature": 0.1,
             },
         }

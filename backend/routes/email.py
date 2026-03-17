@@ -29,7 +29,7 @@ async def send_deletion_email(req: DeletionEmailRequest):
         resend.api_key = RESEND_API_KEY
         
         response = resend.Emails.send({
-            "from": "SkinGraph Support <support@skingraph.com>", # Note: This requires a verified domain in Resend
+            "from": "SkinGraph Support <onboarding@resend.dev>", # Must use this until domain is verified
             "to": [req.email],
             "subject": "Your SkinGraph Account Has Been Deleted",
             "html": f"""

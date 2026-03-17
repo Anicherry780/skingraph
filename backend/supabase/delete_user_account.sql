@@ -12,9 +12,12 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  -- Delete the user from auth.users
-  -- This will automatically cascade to user_profiles, user_analyses, and user_saved_products
-  -- because we set up those foreign keys with ON DELETE CASCADE
+  -- Delete all related data first to prevent foreign key constraint violations
+  DELETE FROM public.user_profiles WHERE id = auth.uid();
+  DELETE FROM public.user_analyses WHERE user_id = auth.uid();
+  DELETE FROM public.user_saved_products WHERE user_id = auth.uid();
+
+  -- Finally delete the user from auth.users
   DELETE FROM auth.users WHERE id = auth.uid();
 END;
 $$;

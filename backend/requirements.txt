@@ -8,3 +8,4 @@ Pillow==11.0.0
 requests==2.32.3
 pydantic==2.9.2
 # nova-act  # Install separately: pip install nova-act (requires browser env)
+resend==2.24.0

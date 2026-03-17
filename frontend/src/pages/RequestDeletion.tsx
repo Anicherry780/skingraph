@@ -24,6 +24,20 @@ const RequestDeletion: React.FC = () => {
     setIsDeleting(true);
     setError(null);
     
+    // 1. Send the email first (so we still have the user's email address)
+    try {
+      if (user?.email) {
+        await fetch(`${import.meta.env.VITE_API_URL}/api/email/deletion-confirmation`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: user.email }),
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to send deletion confirmation email, but proceeding with deletion", e);
+    }
+    
+    // 2. Actually delete the account
     const { error: deleteError } = await deleteAccount();
     
     if (deleteError) {

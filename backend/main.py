@@ -35,12 +35,13 @@ from routes.alternatives import router as alternatives_router
 from routes.compatibility import router as compatibility_router
 
 from routes.scan_label import router as scan_label_router
+from routes.email import router as email_router
 
 app.include_router(analyze_router)
 app.include_router(alternatives_router)
 app.include_router(compatibility_router)
 app.include_router(scan_label_router)
-
+app.include_router(email_router)
 
 @app.get("/")
 async def root():

@@ -70,8 +70,9 @@ function formatDate(iso: string) {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, signOut, deleteAccount } = useAuth();
   const [tab, setTab] = useState<DashTab>("history");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // History state
   const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
@@ -190,6 +191,20 @@ const Dashboard: React.FC = () => {
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm("Are you absolutely sure? This will instantly and permanently delete your account, history, and saved products. This CANNOT be undone.")) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    const { error } = await deleteAccount();
+    if (error) {
+      alert(`Error deleting account: ${error}`);
+      setIsDeleting(false);
+    }
+    // If successful, the AuthContext automatically signs out and clears context
   };
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -376,6 +391,31 @@ const Dashboard: React.FC = () => {
                 {profileSaved && (
                   <p className="profile-success">✓ Profile saved successfully</p>
                 )}
+
+                {/* Danger Zone */}
+                <div style={{ marginTop: '40px', paddingTop: '24px', borderTop: '1px solid var(--border)' }}>
+                  <h3 style={{ color: '#ef4444', fontSize: '1.2rem', marginBottom: '8px' }}>Danger Zone</h3>
+                  <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', marginBottom: '16px' }}>
+                    Permanently delete your account and all associated data. This action cannot be undone.
+                  </p>
+                  <button 
+                    onClick={handleDeleteAccount}
+                    disabled={isDeleting}
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: '#ef4444',
+                      border: '1px solid #ef4444',
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      opacity: isDeleting ? 0.7 : 1
+                    }}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Delete My Account'}
+                  </button>
+                </div>
               </div>
             )}
           </section>

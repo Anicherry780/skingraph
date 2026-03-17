@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -91,9 +92,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
   };
 
+  const deleteAccount = async () => {
+    if (!supabaseEnabled) return { error: "Auth is not configured" };
+    // Call the secure Postgres function (RPC) we will create in the database
+    const { error } = await supabase.rpc('delete_user_account');
+    if (!error) {
+      // If it succeeded, clear local state and log out
+      setUser(null);
+      setSession(null);
+      await supabase.auth.signOut();
+    }
+    return { error: error?.message ?? null };
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, signUp, signIn, signInWithGoogle, signOut }}
+      value={{ user, session, loading, signUp, signIn, signInWithGoogle, signOut, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>

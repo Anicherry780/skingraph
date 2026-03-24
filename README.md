@@ -1,10 +1,10 @@
-# SkinGraph 🧴
+# SkinGraph 
 
 > Know exactly what's in your skincare — powered by Amazon Nova.
 
-**🌐 Live:** [skin.anirudhdev.com](https://skin.anirudhdev.com)  
-**📱 Android:** APK built with Capacitor (loads production site)  
-**🏆 Hackathon:** Amazon Nova AI Hackathon — March 2026
+**Live:** [skin.anirudhdev.com](https://skin.anirudhdev.com)  
+**Android:** APK built with Capacitor (loads production site)  
+**Hackathon:** Amazon Nova AI Hackathon — March 2026
 
 ---
 
@@ -162,9 +162,3 @@ S3_BUCKET_NAME=...
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 ```
-
----
-
-## License
-
-MIT
